@@ -108,13 +108,12 @@ const AgentCreator = () => {
       console.log(`Starting download of model: ${modelId}`);
       
       // Initialize the text-generation pipeline with progress tracking
-      // Removed the 'quantized' property which was causing the type error
+      // Using only the progress_callback option which is supported in the type definition
       const textGenerationPipeline = await pipeline(
         'text-generation',
         modelId,
         {
-          progress_callback: progressCallback,
-          token: HF_TOKEN
+          progress_callback: progressCallback
         }
       );
       
