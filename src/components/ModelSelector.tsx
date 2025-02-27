@@ -1,131 +1,155 @@
 
+import { useState } from "react";
+import { 
+  Select, 
+  SelectContent, 
+  SelectGroup, 
+  SelectItem, 
+  SelectLabel, 
+  SelectTrigger, 
+  SelectValue 
+} from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
-import { Info, Award, Zap, Clock } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { AlertTriangle, LucideIcon, Zap, Cpu, CheckCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+
+interface Model {
+  id: string;
+  name: string;
+  description: string;
+  requiresAuth?: boolean;
+}
 
 interface ModelSelectorProps {
   selectedModel: string;
-  onSelectModel: (model: string) => void;
+  onSelectModel: (modelId: string) => void;
+  models?: Model[];
 }
 
-const ModelSelector = ({ selectedModel, onSelectModel }: ModelSelectorProps) => {
-  const models = [
-    {
-      id: "llama-3.2-3B",
-      name: "Llama 3.2 3B",
-      description: "Compact and efficient model ideal for most use cases",
-      size: "3 GB",
-      specs: "3 billion parameters, good balance of size and capability",
-      strengths: ["Fast response times", "Low resource requirements", "Good for basic conversations"],
-      recommended: true,
-      huggingFaceId: "meta-llama/Meta-Llama-3.2-3B",
-      downloadTime: "~10-15 minutes",
-      compatibleDevices: ["CPU", "GPU (1GB+)"]
-    }
-  ];
+// Default models if none are provided
+const DEFAULT_MODELS: Model[] = [
+  { 
+    id: "gemma-2b", 
+    name: "Gemma-2B", 
+    description: "Google's 2B parameter open model with good performance for lightweight applications",
+    requiresAuth: false
+  },
+  { 
+    id: "llama-3.1-1B", 
+    name: "Llama 3.1 1B", 
+    description: "Meta's smallest Llama model, good balance of size and performance",
+    requiresAuth: true
+  },
+  { 
+    id: "llama-3.2-3B", 
+    name: "Llama 3.2 3B", 
+    description: "Meta's cutting-edge 3B parameter model with state-of-the-art performance",
+    requiresAuth: true
+  },
+  { 
+    id: "mistral-7b", 
+    name: "Mistral 7B", 
+    description: "Mistral AI's 7B parameter model with excellent reasoning capabilities", 
+    requiresAuth: false
+  },
+];
+
+const ModelSelector = ({ selectedModel, onSelectModel, models = DEFAULT_MODELS }: ModelSelectorProps) => {
+  const [selectedModelDetails, setSelectedModelDetails] = useState<Model>(
+    models.find(model => model.id === selectedModel) || models[0]
+  );
+
+  const handleModelChange = (modelId: string) => {
+    onSelectModel(modelId);
+    setSelectedModelDetails(models.find(model => model.id === modelId) || models[0]);
+  };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-medium">Choose a Language Model</h3>
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <h3 className="text-lg font-medium">Select Model</h3>
         <p className="text-sm text-muted-foreground">
-          Currently supporting Meta's Llama 3.2 3B model
+          Choose the AI model that powers your agent
         </p>
-      </div>
-
-      <RadioGroup
-        value={selectedModel}
-        onValueChange={onSelectModel}
-        className="grid gap-4"
-      >
-        {models.map((model) => (
-          <div key={model.id} className="relative">
-            {model.recommended && (
-              <div className="absolute -top-2 -right-2 z-10">
-                <Badge variant="default" className="bg-primary text-primary-foreground text-xs py-1 px-2 rounded-full flex items-center">
-                  <Award className="h-3 w-3 mr-1" />
-                  Recommended
-                </Badge>
-              </div>
-            )}
-            
-            <Card className={`cursor-pointer transition-all hover:border-primary ${selectedModel === model.id ? "border-primary" : ""}`}>
-              <CardHeader className="pb-2">
-                <div className="flex justify-between items-start">
-                  <CardTitle className="text-base flex items-center">
+        <Select value={selectedModel} onValueChange={handleModelChange}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select a model" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              <SelectLabel>Available Models</SelectLabel>
+              {models.map((model) => (
+                <SelectItem key={model.id} value={model.id}>
+                  <span className="flex items-center">
                     {model.name}
-                  </CardTitle>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Info className="h-4 w-4 text-muted-foreground cursor-pointer" />
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p className="font-medium">{model.specs}</p>
-                        <p className="text-xs mt-1">HuggingFace ID: {model.huggingFaceId}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                <CardDescription>{model.description}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid md:grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Model Size</p>
-                    <p className="text-sm text-muted-foreground">{model.size}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Best For</p>
-                    <div className="flex flex-wrap gap-1">
-                      {model.strengths.map((strength, i) => (
-                        <span key={i} className="inline-flex items-center text-xs bg-secondary text-secondary-foreground rounded-full px-2 py-0.5">
-                          <Zap className="h-3 w-3 mr-1" />
-                          {strength}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-1 mt-2">
-                    <p className="text-sm font-medium">Download Time</p>
-                    <p className="text-sm text-muted-foreground flex items-center">
-                      <Clock className="h-3 w-3 mr-1" />
-                      {model.downloadTime}
-                    </p>
-                  </div>
-                  
-                  <div className="space-y-1 mt-2">
-                    <p className="text-sm font-medium">Compatible With</p>
-                    <div className="flex flex-wrap gap-1">
-                      {model.compatibleDevices.map((device, i) => (
-                        <Badge key={i} variant="outline" className="text-xs">
-                          {device}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="mt-4 flex items-center">
-                  <RadioGroupItem value={model.id} id={model.id} className="peer sr-only" />
-                  <Label
-                    htmlFor={model.id}
-                    className="flex flex-1 cursor-pointer items-center justify-center rounded-md border-2 border-muted bg-popover px-3 py-2 text-center text-sm font-medium ring-offset-background peer-data-[state=checked]:border-primary peer-data-[state=checked]:text-primary"
-                  >
-                    Select this model
-                  </Label>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        ))}
-      </RadioGroup>
+                    {model.requiresAuth && (
+                      <Badge variant="outline" className="ml-2 text-xs">
+                        Auth Required
+                      </Badge>
+                    )}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+      </div>
+      
+      {selectedModelDetails && (
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex justify-between items-start">
+              <div>
+                <CardTitle className="text-base">{selectedModelDetails.name}</CardTitle>
+                {selectedModelDetails.requiresAuth && (
+                  <Badge variant="outline" className="mt-1">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    Requires Hugging Face Token
+                  </Badge>
+                )}
+              </div>
+              <ModelIcon modelId={selectedModelDetails.id} />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <CardDescription>
+              {selectedModelDetails.description}
+            </CardDescription>
+            
+            <div className="grid grid-cols-2 gap-2 mt-4">
+              <div className="text-xs text-muted-foreground">
+                <span className="font-medium">Type:</span> Text Generation
+              </div>
+              <div className="text-xs text-muted-foreground">
+                <span className="font-medium">Size:</span> {getSizeLabel(selectedModelDetails.id)}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
+};
+
+// Helper to get model size for display
+const getSizeLabel = (modelId: string): string => {
+  if (modelId.includes("3.2-3B") || modelId.includes("3B")) return "3B parameters";
+  if (modelId.includes("1B")) return "1B parameters";
+  if (modelId.includes("2b") || modelId.includes("2B")) return "2B parameters";
+  if (modelId.includes("7b") || modelId.includes("7B")) return "7B parameters";
+  return "Unknown size";
+};
+
+// Icon component based on model
+const ModelIcon = ({ modelId }: { modelId: string }) => {
+  if (modelId.includes("llama")) {
+    return <Zap className="h-5 w-5 text-blue-500" />;
+  } else if (modelId.includes("gemma")) {
+    return <CheckCircle className="h-5 w-5 text-green-500" />;
+  } else if (modelId.includes("mistral")) {
+    return <Cpu className="h-5 w-5 text-purple-500" />;
+  }
+  return <Cpu className="h-5 w-5 text-gray-500" />;
 };
 
 export default ModelSelector;

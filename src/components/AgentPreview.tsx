@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -18,6 +17,8 @@ interface AgentPreviewProps {
     systemPrompt: string;
     exampleConversations: string;
     isModelDownloaded: boolean;
+    useDemoMode?: boolean;
+    generateResponse?: (userPrompt: string) => Promise<string>;
   };
 }
 
@@ -43,51 +44,57 @@ const AgentPreview = ({ agent }: AgentPreviewProps) => {
     }
   }, [messages]);
 
-  const handleSendMessage = () => {
-    if (!newMessage.trim() || !agent.isModelDownloaded) return;
+  const handleSendMessage = async () => {
+    if (!newMessage.trim()) return;
     
     // Add user message
     setMessages(prev => [...prev, { role: 'user', content: newMessage }]);
+    const userInput = newMessage;
     setNewMessage("");
     setIsTyping(true);
     
-    // Simulate AI response based on agent configuration
-    const timer = setTimeout(() => {
-      let response = "";
+    try {
+      let response;
       
-      // Generate a more customized response based on agent configuration
-      if (agent.systemPrompt) {
-        if (agent.niche.toLowerCase().includes("fitness")) {
-          response = generateFitnessResponse(newMessage);
-        } else if (agent.niche.toLowerCase().includes("finance")) {
-          response = generateFinanceResponse(newMessage);
-        } else if (agent.niche.toLowerCase().includes("cook") || agent.niche.toLowerCase().includes("food")) {
-          response = generateCookingResponse(newMessage);
-        } else if (agent.niche.toLowerCase().includes("code") || agent.niche.toLowerCase().includes("program")) {
-          response = generateCodingResponse(newMessage);
-        } else {
-          response = generateGenericResponse(newMessage, agent.niche);
-        }
+      // Use agent's generateResponse function if available
+      if (agent.generateResponse) {
+        response = await agent.generateResponse(userInput);
       } else {
-        response = "I'm still learning based on the instructions you provide. Once you complete my configuration, I'll be able to respond more effectively!";
-      }
-      
-      // Add personality traits to the response if provided
-      if (agent.personality) {
-        if (agent.personality.toLowerCase().includes("friendly")) {
-          response += " 😊 Let me know if you need anything else!";
-        } else if (agent.personality.toLowerCase().includes("professional")) {
-          response = "Based on my analysis: " + response + " Please let me know if you require further assistance.";
-        } else if (agent.personality.toLowerCase().includes("humor")) {
-          response += " And hey, that's just my two cents - though with inflation, it might be worth a bit less now! 😉";
-        }
+        // Otherwise use the fallback response generator
+        response = await generateFallbackResponse(userInput);
       }
       
       setMessages(prev => [...prev, { role: 'assistant', content: response }]);
+    } catch (error) {
+      console.error("Error generating response:", error);
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: "I'm having trouble generating a response right now. Please try again later." 
+      }]);
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
+  };
+  
+  // Fallback response generator when agent doesn't provide one
+  const generateFallbackResponse = async (userMessage: string) => {
+    // Add artificial delay to simulate thinking
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
-    return () => clearTimeout(timer);
+    const lowerCaseMessage = userMessage.toLowerCase();
+    
+    // Generate a response based on agent configuration
+    if (agent.niche.toLowerCase().includes("fitness")) {
+      return generateFitnessResponse(userMessage);
+    } else if (agent.niche.toLowerCase().includes("finance")) {
+      return generateFinanceResponse(userMessage);
+    } else if (agent.niche.toLowerCase().includes("cook") || agent.niche.toLowerCase().includes("food")) {
+      return generateCookingResponse(userMessage);
+    } else if (agent.niche.toLowerCase().includes("code") || agent.niche.toLowerCase().includes("program")) {
+      return generateCodingResponse(userMessage);
+    } else {
+      return generateGenericResponse(userMessage, agent.niche);
+    }
   };
   
   // Helper functions to generate domain-specific responses
@@ -157,6 +164,9 @@ const AgentPreview = ({ agent }: AgentPreviewProps) => {
                 </AvatarFallback>
               </Avatar>
               <CardTitle className="text-lg">{agent.name || "AI Assistant"}</CardTitle>
+              {agent.useDemoMode && (
+                <Badge variant="outline" className="ml-2 text-xs">Demo Mode</Badge>
+              )}
             </div>
           </CardHeader>
           
@@ -225,24 +235,16 @@ const AgentPreview = ({ agent }: AgentPreviewProps) => {
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                disabled={!agent.isModelDownloaded}
               />
               <Button 
                 size="icon" 
                 onClick={handleSendMessage}
-                disabled={!agent.isModelDownloaded}
               >
                 <Send className="h-4 w-4" />
               </Button>
             </div>
           </CardFooter>
         </Card>
-        
-        {!agent.isModelDownloaded && (
-          <p className="text-sm text-muted-foreground mt-4 text-center">
-            Download the model to enable interactive chat preview
-          </p>
-        )}
       </TabsContent>
       
       <TabsContent value="config" className="space-y-4 fade-in">
@@ -319,6 +321,15 @@ const AgentPreview = ({ agent }: AgentPreviewProps) => {
                 </h4>
                 <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                   {agent.exampleConversations}
+                </p>
+              </div>
+            )}
+
+            {agent.useDemoMode && (
+              <div className="mt-4 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded border border-yellow-200 dark:border-yellow-800">
+                <h4 className="text-sm font-medium text-yellow-800 dark:text-yellow-400">Demo Mode Active</h4>
+                <p className="text-xs text-yellow-700 dark:text-yellow-500 mt-1">
+                  Responses are simulated and not generated by the AI model.
                 </p>
               </div>
             )}

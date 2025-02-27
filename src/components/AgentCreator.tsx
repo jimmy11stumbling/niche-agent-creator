@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
 import { useNavigate } from "react-router-dom";
+import { Switch } from "@/components/ui/switch";
 import {
   Settings,
   Brain,
@@ -23,14 +23,38 @@ import {
   Globe,
   Code,
   PanelRightClose,
+  AlertTriangle,
 } from "lucide-react";
 import ModelSelector from "./ModelSelector";
 import AgentPreview from "./AgentPreview";
 import TemplatesGallery from "./TemplatesGallery";
 import { pipeline } from "@huggingface/transformers";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-// Hugging Face access token
-const HF_TOKEN = "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";
+const USE_DEMO_MODE = true;
+
+const AVAILABLE_MODELS = {
+  "llama-3.2-3B": {
+    id: "meta-llama/Meta-Llama-3.2-3B",
+    description: "Meta's smallest Llama 3.2 model optimized for performance",
+    requiresAuth: true,
+  },
+  "llama-3.1-1B": {
+    id: "meta-llama/Meta-Llama-3.1-1B", 
+    description: "Smaller 1B parameter model from Meta",
+    requiresAuth: true,
+  },
+  "gemma-2b": {
+    id: "google/gemma-2b", 
+    description: "Google's 2B parameter open model",
+    requiresAuth: false,
+  },
+  "mistral-7b": { 
+    id: "mistralai/Mistral-7B-v0.1", 
+    description: "Mistral AI's high-quality 7B parameter model",
+    requiresAuth: false,
+  },
+};
 
 const AgentCreator = () => {
   const { toast } = useToast();
@@ -39,6 +63,9 @@ const AgentCreator = () => {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
+  const [isHFTokenModalOpen, setIsHFTokenModalOpen] = useState(false);
+  const [hfToken, setHfToken] = useState("");
+  const [useDemoMode, setUseDemoMode] = useState(USE_DEMO_MODE);
   const [agent, setAgent] = useState({
     name: "",
     description: "",
@@ -48,12 +75,11 @@ const AgentCreator = () => {
     exampleConversations: "",
     deploymentMethod: "web",
     isModelDownloaded: false,
-    selectedModel: "llama-3.2-3B",
+    selectedModel: "gemma-2b",
     model: null,
   });
 
   useEffect(() => {
-    // Check for previously saved agent in localStorage
     const savedAgent = localStorage.getItem("agentDraft");
     if (savedAgent) {
       try {
@@ -67,59 +93,80 @@ const AgentCreator = () => {
         console.error("Error loading saved agent:", e);
       }
     }
+    
+    const savedToken = localStorage.getItem("hfToken");
+    if (savedToken) {
+      setHfToken(savedToken);
+    }
   }, []);
 
   const updateAgent = (field: string, value: string) => {
     setAgent((prev) => {
       const updatedAgent = { ...prev, [field]: value };
-      // Save draft to localStorage
       localStorage.setItem("agentDraft", JSON.stringify(updatedAgent));
       return updatedAgent;
     });
   };
 
-  // Fixed implementation of model download with progress tracking
+  const handleHFTokenSubmit = () => {
+    if (hfToken.trim()) {
+      localStorage.setItem("hfToken", hfToken);
+      setIsHFTokenModalOpen(false);
+      toast({
+        title: "Token Saved",
+        description: "Your Hugging Face token has been saved.",
+      });
+      downloadModel();
+    } else {
+      toast({
+        title: "Token Required",
+        description: "Please enter a valid Hugging Face token.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const downloadModel = async () => {
+    if (AVAILABLE_MODELS[agent.selectedModel]?.requiresAuth && !hfToken) {
+      setIsHFTokenModalOpen(true);
+      return;
+    }
+    
     setIsDownloading(true);
     setDownloadProgress(0);
     setDownloadError(null);
     
     try {
-      // Setup progress callback - fixed to match the correct type
       const progressCallback = (progressInfo: any) => {
-        // Check if progressInfo has a progress property directly
         if ('progress' in progressInfo) {
           setDownloadProgress(Math.round(progressInfo.progress * 100));
-        } 
-        // Handle download progress event which may have a different structure
-        else if ('loaded' in progressInfo && 'total' in progressInfo) {
+        } else if ('loaded' in progressInfo && 'total' in progressInfo) {
           const progress = progressInfo.loaded / progressInfo.total;
           setDownloadProgress(Math.round(progress * 100));
-        }
-        // Handle initiate events or other progress info without numeric progress
-        else {
+        } else {
           console.log("Progress event:", progressInfo);
-          // Don't update progress bar for non-numeric progress events
         }
       };
 
-      // Use the Hugging Face transformers.js library to download and set up the model
-      const modelId = "meta-llama/Meta-Llama-3.2-3B";
+      const modelId = AVAILABLE_MODELS[agent.selectedModel]?.id || "google/gemma-2b";
       console.log(`Starting download of model: ${modelId}`);
       
-      // Initialize the text-generation pipeline with progress tracking
-      // Using only the progress_callback option which is supported in the type definition
+      const pipelineOptions = {
+        progress_callback: progressCallback,
+      };
+      
+      if (AVAILABLE_MODELS[agent.selectedModel]?.requiresAuth && hfToken) {
+        pipelineOptions.token = hfToken;
+      }
+      
       const textGenerationPipeline = await pipeline(
         'text-generation',
         modelId,
-        {
-          progress_callback: progressCallback
-        }
+        pipelineOptions
       );
       
       console.log("Model download complete");
       
-      // Update agent state with the downloaded model
       setAgent((prev) => {
         const updatedAgent = { 
           ...prev, 
@@ -128,13 +175,14 @@ const AgentCreator = () => {
         };
         localStorage.setItem("agentDraft", JSON.stringify({
           ...updatedAgent,
-          model: null // Don't store the actual model in localStorage
+          model: null
         }));
         return updatedAgent;
       });
       
       setIsDownloading(false);
       setDownloadProgress(100);
+      setUseDemoMode(false);
       
       toast({
         title: "Model Downloaded Successfully",
@@ -143,13 +191,24 @@ const AgentCreator = () => {
     } catch (error) {
       console.error("Error downloading model:", error);
       setIsDownloading(false);
-      setDownloadError(error instanceof Error ? error.message : "Unknown error occurred");
       
-      toast({
-        title: "Download Failed",
-        description: `Error downloading model: ${error instanceof Error ? error.message : "Unknown error"}`,
-        variant: "destructive",
-      });
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      setDownloadError(errorMessage);
+      
+      if (errorMessage.includes("Unauthorized") || errorMessage.includes("Invalid username or password")) {
+        setIsHFTokenModalOpen(true);
+        toast({
+          title: "Authorization Failed",
+          description: "This model requires a Hugging Face token for access.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Download Failed",
+          description: `Error downloading model: ${errorMessage}`,
+          variant: "destructive",
+        });
+      }
     }
   };
 
@@ -163,25 +222,24 @@ const AgentCreator = () => {
       return;
     }
 
-    if (!agent.isModelDownloaded) {
+    if (!agent.isModelDownloaded && !useDemoMode) {
       toast({
         title: "Model Not Downloaded",
-        description: "Please download the model before creating your agent.",
+        description: "Please download the model or enable demo mode to continue.",
         variant: "destructive",
       });
       return;
     }
 
-    // Generate a unique ID for the agent
     const agentId = Date.now().toString();
     
-    // Save the agent to localStorage for persistence
     const agents = JSON.parse(localStorage.getItem("agents") || "[]");
     const newAgent = {
       ...agent,
       id: agentId,
       createdAt: new Date().toISOString(),
-      model: null // Don't store the model object itself
+      useDemoMode,
+      model: null
     };
     
     localStorage.setItem("agents", JSON.stringify([...agents, newAgent]));
@@ -192,7 +250,6 @@ const AgentCreator = () => {
       description: "Your AI agent has been created and is ready to deploy.",
     });
     
-    // Navigate to deployment page
     navigate(`/deploy/${agentId}`);
   };
 
@@ -217,13 +274,15 @@ const AgentCreator = () => {
   };
 
   const generateResponse = async (userPrompt: string) => {
-    if (!agent.model) return "The model is not loaded yet.";
+    if (!agent.model && !useDemoMode) return "The model is not loaded yet.";
     
     try {
-      // Prepare the system prompt and context
+      if (useDemoMode) {
+        return simulateResponse(userPrompt, agent);
+      }
+      
       const context = `${agent.systemPrompt}\n\nUser: ${userPrompt}\nAssistant:`;
       
-      // Generate response from the model
       const response = await agent.model(context, {
         max_new_tokens: 256,
         temperature: 0.7,
@@ -232,13 +291,55 @@ const AgentCreator = () => {
       });
       
       const generatedText = response[0].generated_text;
-      // Extract just the Assistant's response
-      const assistantResponse = generatedText.split("Assistant:")[1].trim();
+      const assistantResponse = generatedText.split("Assistant:")[1]?.trim() || "I don't have a response for that yet.";
       
       return assistantResponse;
     } catch (error) {
       console.error("Error generating response:", error);
-      return "I'm sorry, I encountered an error while processing your request.";
+      return "I encountered an error while processing your request. Please try again.";
+    }
+  };
+
+  const simulateResponse = (userPrompt: string, agentConfig: any) => {
+    const { niche, personality, systemPrompt } = agentConfig;
+    
+    if (niche.toLowerCase().includes("finance")) {
+      return "Based on best financial practices, I recommend diversifying your investments across different asset classes. This helps reduce risk while potentially increasing returns. Would you like me to elaborate on specific investment strategies?";
+    } else if (niche.toLowerCase().includes("fitness")) {
+      return "For optimal fitness results, consistency is key. I'd recommend a balanced routine of strength training, cardio, and adequate recovery. Would you like me to suggest a specific workout plan based on your goals?";
+    } else if (niche.toLowerCase().includes("marketing")) {
+      return "Effective marketing strategies are data-driven and customer-focused. Consider leveraging social media analytics to understand your audience better and create targeted content that resonates with them. Would you like specific suggestions for your marketing campaign?";
+    } else if (niche.toLowerCase().includes("tech") || niche.toLowerCase().includes("programming")) {
+      return "When approaching this technical challenge, I'd recommend breaking it down into smaller, more manageable components. This modular approach makes debugging easier and improves code maintainability. Would you like me to walk you through the implementation steps?";
+    } else if (niche.toLowerCase().includes("health") || niche.toLowerCase().includes("nutrition")) {
+      return "Maintaining optimal health involves balancing nutrition, physical activity, and mental wellbeing. For nutrition specifically, focus on whole foods, adequate protein intake, and staying hydrated. Would you like personalized health recommendations?";
+    } else {
+      return `I understand your question about "${userPrompt.substring(0, 30)}...". As your ${niche || "specialized"} assistant, I'm here to help with expert guidance tailored to your needs. Could you provide more details so I can give you the most relevant information?`;
+    }
+  };
+
+  const toggleDemoMode = () => {
+    setUseDemoMode(!useDemoMode);
+    if (!useDemoMode) {
+      setAgent(prev => ({
+        ...prev,
+        isModelDownloaded: true
+      }));
+      toast({
+        title: "Demo Mode Enabled",
+        description: "You can now create and test agents without downloading models.",
+      });
+    } else {
+      if (!agent.model) {
+        setAgent(prev => ({
+          ...prev,
+          isModelDownloaded: false
+        }));
+      }
+      toast({
+        title: "Demo Mode Disabled",
+        description: "Agents will require model download for full functionality.",
+      });
     }
   };
 
@@ -353,63 +454,108 @@ const AgentCreator = () => {
               </TabsContent>
 
               <TabsContent value="model" className="space-y-6 slide-in">
-                <ModelSelector
-                  selectedModel={agent.selectedModel}
-                  onSelectModel={(model) => updateAgent("selectedModel", model)}
-                />
-                
-                <Separator className="my-4" />
-                
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <h3 className="text-lg font-medium">Download Model</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Download the model to use it for your agent
-                      </p>
-                    </div>
-                    <Button
-                      onClick={downloadModel}
-                      disabled={isDownloading || agent.isModelDownloaded}
-                      className="flex items-center"
-                    >
-                      {agent.isModelDownloaded ? (
-                        <>
-                          <CheckCircle2 className="mr-2 h-4 w-4" />
-                          Downloaded
-                        </>
-                      ) : isDownloading ? (
-                        <>
-                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                          Downloading...
-                        </>
-                      ) : (
-                        <>
-                          <Download className="mr-2 h-4 w-4" />
-                          Download Model
-                        </>
-                      )}
-                    </Button>
+                <div className="flex items-center space-x-2 mb-4">
+                  <Switch 
+                    checked={useDemoMode} 
+                    onCheckedChange={toggleDemoMode} 
+                    id="demo-mode"
+                  />
+                  <Label htmlFor="demo-mode" className="font-medium">
+                    Enable Demo Mode
+                  </Label>
+                  <div className="ml-2 text-xs text-muted-foreground">
+                    (Use simulated responses when models can't be downloaded)
                   </div>
-                  
-                  {(isDownloading || agent.isModelDownloaded) && (
-                    <div className="space-y-2">
-                      <Progress value={downloadProgress} className="h-2" />
-                      {isDownloading && (
-                        <p className="text-xs text-muted-foreground">
-                          Downloading model... {Math.round(downloadProgress)}%
-                        </p>
+                </div>
+
+                {!useDemoMode && (
+                  <>
+                    <ModelSelector
+                      selectedModel={agent.selectedModel}
+                      onSelectModel={(model) => updateAgent("selectedModel", model)}
+                      models={Object.keys(AVAILABLE_MODELS).map(key => ({
+                        id: key,
+                        name: key,
+                        description: AVAILABLE_MODELS[key].description,
+                        requiresAuth: AVAILABLE_MODELS[key].requiresAuth
+                      }))}
+                    />
+                    
+                    <Separator className="my-4" />
+                    
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h3 className="text-lg font-medium">Download Model</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Download the model to use it for your agent
+                          </p>
+                          {AVAILABLE_MODELS[agent.selectedModel]?.requiresAuth && (
+                            <p className="text-xs text-amber-600 flex items-center mt-1">
+                              <AlertTriangle className="h-3 w-3 mr-1" />
+                              This model requires Hugging Face authentication
+                            </p>
+                          )}
+                        </div>
+                        <Button
+                          onClick={downloadModel}
+                          disabled={isDownloading || agent.isModelDownloaded}
+                          className="flex items-center"
+                        >
+                          {agent.isModelDownloaded ? (
+                            <>
+                              <CheckCircle2 className="mr-2 h-4 w-4" />
+                              Downloaded
+                            </>
+                          ) : isDownloading ? (
+                            <>
+                              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                              Downloading...
+                            </>
+                          ) : (
+                            <>
+                              <Download className="mr-2 h-4 w-4" />
+                              Download Model
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      
+                      {(isDownloading || agent.isModelDownloaded) && (
+                        <div className="space-y-2">
+                          <Progress value={downloadProgress} className="h-2" />
+                          {isDownloading && (
+                            <p className="text-xs text-muted-foreground">
+                              Downloading model... {Math.round(downloadProgress)}%
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      
+                      {downloadError && (
+                        <div className="bg-destructive/10 text-destructive p-3 rounded-md text-sm">
+                          <p>Error downloading model: {downloadError}</p>
+                          <p className="mt-1 flex items-center">
+                            <AlertTriangle className="h-4 w-4 mr-1" />
+                            Try enabling Demo Mode above to create your agent without downloading the model.
+                          </p>
+                        </div>
                       )}
                     </div>
-                  )}
-                  
-                  {downloadError && (
-                    <div className="bg-destructive/10 text-destructive p-3 rounded-md text-sm">
-                      <p>Error downloading model: {downloadError}</p>
-                      <p className="mt-1">Please check your internet connection and try again.</p>
-                    </div>
-                  )}
-                </div>
+                  </>
+                )}
+
+                {useDemoMode && (
+                  <div className="bg-secondary/50 p-4 rounded-md">
+                    <h3 className="text-lg font-medium mb-2 flex items-center">
+                      <CheckCircle2 className="mr-2 h-5 w-5 text-green-500" />
+                      Demo Mode Active
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      You can create and test your agent with simulated AI responses. No model download required.
+                    </p>
+                  </div>
+                )}
 
                 <div className="flex justify-between pt-4">
                   <Button variant="outline" onClick={() => setCurrentStep("personality")}>
@@ -417,7 +563,7 @@ const AgentCreator = () => {
                   </Button>
                   <Button 
                     onClick={() => setCurrentStep("deploy")}
-                    disabled={!agent.isModelDownloaded}
+                    disabled={!agent.isModelDownloaded && !useDemoMode}
                   >
                     Continue to Deployment
                   </Button>
@@ -506,7 +652,7 @@ const AgentCreator = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="h-[500px] overflow-auto">
-            <AgentPreview agent={agent} />
+            <AgentPreview agent={{...agent, generateResponse, useDemoMode}} />
           </CardContent>
         </Card>
       </div>
@@ -518,6 +664,40 @@ const AgentCreator = () => {
         </p>
         <TemplatesGallery onSelectTemplate={handleTemplateSelect} />
       </div>
+
+      <Dialog open={isHFTokenModalOpen} onOpenChange={setIsHFTokenModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Hugging Face Token Required</DialogTitle>
+            <DialogDescription>
+              This model requires authentication. Please enter your Hugging Face token to continue.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="hf-token">Hugging Face Token</Label>
+              <Input
+                id="hf-token"
+                type="password"
+                placeholder="hf_..."
+                value={hfToken}
+                onChange={(e) => setHfToken(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                You can get a token from <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">huggingface.co/settings/tokens</a>
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsHFTokenModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleHFTokenSubmit}>
+              Save Token & Download
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
