@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
+import { useNavigate } from "react-router-dom";
 import {
   Settings,
   Brain,
@@ -29,6 +30,7 @@ import TemplatesGallery from "./TemplatesGallery";
 
 const AgentCreator = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState("basics");
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -44,28 +46,61 @@ const AgentCreator = () => {
     selectedModel: "llama-3.2-3B",
   });
 
+  useEffect(() => {
+    // Check for previously saved agent in localStorage
+    const savedAgent = localStorage.getItem("agentDraft");
+    if (savedAgent) {
+      try {
+        const parsedAgent = JSON.parse(savedAgent);
+        setAgent(parsedAgent);
+        toast({
+          title: "Draft Loaded",
+          description: "Your previously saved agent draft has been loaded.",
+        });
+      } catch (e) {
+        console.error("Error loading saved agent:", e);
+      }
+    }
+  }, []);
+
   const updateAgent = (field: string, value: string) => {
-    setAgent((prev) => ({ ...prev, [field]: value }));
+    setAgent((prev) => {
+      const updatedAgent = { ...prev, [field]: value };
+      // Save draft to localStorage
+      localStorage.setItem("agentDraft", JSON.stringify(updatedAgent));
+      return updatedAgent;
+    });
   };
 
+  // Simulated implementation of model download with progress tracking
   const simulateModelDownload = () => {
     setIsDownloading(true);
     setDownloadProgress(0);
     
+    // In a real implementation, this would use the Hugging Face transformers.js library
+    // For example:
+    // import { pipeline } from '@huggingface/transformers';
+    // const model = await pipeline('text-generation', `meta-llama/${agent.selectedModel}`);
+    
+    // For now, we'll simulate the download with a timer
+    let progress = 0;
     const interval = setInterval(() => {
-      setDownloadProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setIsDownloading(false);
-          setAgent((prev) => ({ ...prev, isModelDownloaded: true }));
-          toast({
-            title: "Model Downloaded Successfully",
-            description: "The model has been downloaded and is ready to use.",
-          });
-          return 100;
-        }
-        return prev + 5;
-      });
+      progress += Math.random() * 5;
+      if (progress >= 100) {
+        clearInterval(interval);
+        setIsDownloading(false);
+        setAgent((prev) => ({ ...prev, isModelDownloaded: true }));
+        // Save updated state to localStorage
+        localStorage.setItem("agentDraft", JSON.stringify({...agent, isModelDownloaded: true}));
+        
+        toast({
+          title: "Model Downloaded Successfully",
+          description: "The model has been downloaded and is ready to use.",
+        });
+        setDownloadProgress(100);
+      } else {
+        setDownloadProgress(Math.min(progress, 99));
+      }
     }, 300);
   };
 
@@ -79,22 +114,43 @@ const AgentCreator = () => {
       return;
     }
 
+    // Generate a unique ID for the agent
+    const agentId = Date.now().toString();
+    
+    // In a real implementation, this would save the agent to a backend
+    // For now, we'll save it to localStorage
+    const agents = JSON.parse(localStorage.getItem("agents") || "[]");
+    const newAgent = {
+      ...agent,
+      id: agentId,
+      createdAt: new Date().toISOString(),
+    };
+    
+    localStorage.setItem("agents", JSON.stringify([...agents, newAgent]));
+    localStorage.setItem("currentAgent", JSON.stringify(newAgent));
+    
     toast({
       title: "Agent Created Successfully",
       description: "Your AI agent has been created and is ready to deploy.",
     });
+    
+    // Navigate to deployment page
+    navigate(`/deploy/${agentId}`);
   };
 
   const handleTemplateSelect = (template: any) => {
-    setAgent((prev) => ({
-      ...prev,
+    const updatedAgent = {
+      ...agent,
       name: template.name,
       description: template.description,
       niche: template.niche,
-      personality: template.personality,
-      systemPrompt: template.systemPrompt,
+      personality: template.personality || "",
+      systemPrompt: template.systemPrompt || "",
       exampleConversations: template.exampleConversations || "",
-    }));
+    };
+    
+    setAgent(updatedAgent);
+    localStorage.setItem("agentDraft", JSON.stringify(updatedAgent));
     
     toast({
       title: "Template Applied",
@@ -253,7 +309,14 @@ const AgentCreator = () => {
                   </div>
                   
                   {(isDownloading || agent.isModelDownloaded) && (
-                    <Progress value={downloadProgress} className="h-2" />
+                    <div className="space-y-2">
+                      <Progress value={downloadProgress} className="h-2" />
+                      {isDownloading && (
+                        <p className="text-xs text-muted-foreground">
+                          Downloading {agent.selectedModel}... {Math.round(downloadProgress)}%
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
 
