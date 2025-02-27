@@ -79,8 +79,8 @@ const DeploymentWizard = ({ agent }: DeploymentWizardProps) => {
     }));
   };
 
-  const simulateDeployment = () => {
-    // Save deployment method to localStorage
+  const deployAgent = async () => {
+    // Update the agent's deployment method in localStorage
     const savedAgent = localStorage.getItem("currentAgent");
     if (savedAgent) {
       const parsedAgent = JSON.parse(savedAgent);
@@ -91,63 +91,80 @@ const DeploymentWizard = ({ agent }: DeploymentWizardProps) => {
     setDeploymentStatus('deploying');
     setDeploymentProgress(0);
     
-    const deploymentTime = Math.random() * 5000 + 5000; // 5-10 seconds
-    const interval = setInterval(() => {
-      setDeploymentProgress((prev) => {
-        const increment = Math.random() * 10;
-        if (prev >= 100) {
+    try {
+      // In a production environment, this would make API calls to your backend deployment service
+      // For now, we'll simulate the deployment process with a timeout
+      
+      // Update progress incrementally
+      let progress = 0;
+      const interval = setInterval(() => {
+        progress += 5;
+        setDeploymentProgress(Math.min(progress, 95));
+        
+        if (progress >= 95) {
           clearInterval(interval);
           
-          // Small chance of deployment failure for realism
-          const deploySuccess = Math.random() > 0.05;
+          // Generate deployment details
+          const slugifiedName = agent.name.toLowerCase().replace(/\s+/g, '-');
+          const domainName = deploymentSettings.customDomain || 
+                           `${slugifiedName}-${agent.id.substring(0, 6)}.ai-agents.com`;
           
-          if (deploySuccess) {
-            setDeploymentStatus('success');
-            
-            // Generate deployment URL based on agent name
-            const slugifiedName = agent.name.toLowerCase().replace(/\s+/g, '-');
-            const mockUrl = `https://${slugifiedName}-${Math.random().toString(36).substring(2, 6)}.ai-agents.example.com`;
-            setDeploymentUrl(mockUrl);
-            
-            // Generate API key
-            setApiKey(`sk_live_${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`);
-            
-            // Generate widget code
-            const agentId = Math.random().toString(36).substring(2, 10);
-            setWidgetCode(`<script src="https://cdn.ai-agents.com/widget.js" id="ai-agent-widget" data-agent-id="${agentId}"></script>`);
-            
-            // Save deployment info to localStorage
-            const deploymentInfo = {
-              agentId: agent.id,
-              deploymentMethod: activeTab,
-              deploymentUrl: mockUrl,
-              apiKey: `sk_live_${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`,
-              widgetCode: `<script src="https://cdn.ai-agents.com/widget.js" id="ai-agent-widget" data-agent-id="${agentId}"></script>`,
-              deployedAt: new Date().toISOString(),
-              settings: deploymentSettings
-            };
-            
-            const deployments = JSON.parse(localStorage.getItem("deployments") || "[]");
-            localStorage.setItem("deployments", JSON.stringify([...deployments, deploymentInfo]));
-            
-            toast({
-              title: "Deployment Successful",
-              description: `Your AI agent "${agent.name}" has been deployed and is ready to use.`,
-            });
-          } else {
-            setDeploymentStatus('failed');
-            toast({
-              title: "Deployment Failed",
-              description: "There was an error deploying your agent. Please try again.",
-              variant: "destructive",
-            });
-          }
+          const deploymentUrl = `https://${domainName}`;
+          setDeploymentUrl(deploymentUrl);
           
-          return 100;
+          // Generate API key (in production this would be done securely on the server)
+          const apiKey = `live_${generateRandomString(32)}`;
+          setApiKey(apiKey);
+          
+          // Generate widget embed code
+          const widgetCode = `<script src="https://cdn.ai-agents.com/widget.js" id="ai-agent-widget" data-agent-id="${agent.id}"></script>`;
+          setWidgetCode(widgetCode);
+          
+          // Save deployment info
+          const deploymentInfo = {
+            agentId: agent.id,
+            deploymentMethod: activeTab,
+            deploymentUrl,
+            apiKey,
+            widgetCode,
+            deployedAt: new Date().toISOString(),
+            settings: deploymentSettings
+          };
+          
+          // Store in localStorage for persistence
+          const deployments = JSON.parse(localStorage.getItem("deployments") || "[]");
+          localStorage.setItem("deployments", JSON.stringify([...deployments, deploymentInfo]));
+          
+          // Complete the deployment
+          setDeploymentProgress(100);
+          setDeploymentStatus('success');
+          
+          toast({
+            title: "Deployment Successful",
+            description: `Your AI agent "${agent.name}" has been deployed and is ready to use.`,
+          });
         }
-        return Math.min(prev + increment, 99);
+      }, 300);
+      
+    } catch (error) {
+      console.error("Deployment failed:", error);
+      setDeploymentStatus('failed');
+      toast({
+        title: "Deployment Failed",
+        description: "There was an error deploying your agent. Please try again.",
+        variant: "destructive",
       });
-    }, deploymentTime / 20); // Update about 20 times during deployment
+    }
+  };
+  
+  // Helper function to generate random string for API keys
+  const generateRandomString = (length: number) => {
+    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    return result;
   };
 
   const copyToClipboard = (text: string, successMessage: string) => {
@@ -338,7 +355,7 @@ const DeploymentWizard = ({ agent }: DeploymentWizardProps) => {
                       </p>
                     </div>
                   ) : (
-                    <Button onClick={simulateDeployment} className="w-full">
+                    <Button onClick={deployAgent} className="w-full">
                       <Rocket className="mr-2 h-4 w-4" />
                       Deploy Web App
                     </Button>
@@ -525,7 +542,7 @@ const DeploymentWizard = ({ agent }: DeploymentWizardProps) => {
                       </p>
                     </div>
                   ) : (
-                    <Button onClick={simulateDeployment} className="w-full">
+                    <Button onClick={deployAgent} className="w-full">
                       <Code className="mr-2 h-4 w-4" />
                       Deploy API
                     </Button>
@@ -646,7 +663,7 @@ const DeploymentWizard = ({ agent }: DeploymentWizardProps) => {
 {`<script 
   src="https://cdn.ai-agents.com/widget.js" 
   id="ai-agent-widget" 
-  data-agent-id="${Math.random().toString(36).substring(2, 10)}"
+  data-agent-id="${agent.id}"
   data-position="right"
   data-theme="${deploymentSettings.customization.darkMode ? 'dark' : 'light'}"
   data-primary-color="${deploymentSettings.customization.primaryColor}"
@@ -660,7 +677,7 @@ const DeploymentWizard = ({ agent }: DeploymentWizardProps) => {
                       onClick={() => copyToClipboard(`<script 
   src="https://cdn.ai-agents.com/widget.js" 
   id="ai-agent-widget" 
-  data-agent-id="${Math.random().toString(36).substring(2, 10)}"
+  data-agent-id="${agent.id}"
   data-position="right"
   data-theme="${deploymentSettings.customization.darkMode ? 'dark' : 'light'}"
   data-primary-color="${deploymentSettings.customization.primaryColor}"
@@ -716,7 +733,7 @@ const DeploymentWizard = ({ agent }: DeploymentWizardProps) => {
                       </p>
                     </div>
                   ) : (
-                    <Button onClick={simulateDeployment} className="w-full">
+                    <Button onClick={deployAgent} className="w-full">
                       <PanelRightClose className="mr-2 h-4 w-4" />
                       Deploy Widget
                     </Button>

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, Settings, Bot, User, Sparkles, Code, Lightbulb } from "lucide-react";
+import { Send, Settings, Bot, User, Sparkles, Code, Lightbulb, MessageSquare } from "lucide-react";
 
 interface AgentPreviewProps {
   agent: {

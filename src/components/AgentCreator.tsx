@@ -27,6 +27,10 @@ import {
 import ModelSelector from "./ModelSelector";
 import AgentPreview from "./AgentPreview";
 import TemplatesGallery from "./TemplatesGallery";
+import { pipeline } from "@huggingface/transformers";
+
+// Hugging Face access token
+const HF_TOKEN = "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";
 
 const AgentCreator = () => {
   const { toast } = useToast();
@@ -34,6 +38,7 @@ const AgentCreator = () => {
   const [currentStep, setCurrentStep] = useState("basics");
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [agent, setAgent] = useState({
     name: "",
     description: "",
@@ -44,6 +49,7 @@ const AgentCreator = () => {
     deploymentMethod: "web",
     isModelDownloaded: false,
     selectedModel: "llama-3.2-3B",
+    model: null,
   });
 
   useEffect(() => {
@@ -72,36 +78,67 @@ const AgentCreator = () => {
     });
   };
 
-  // Simulated implementation of model download with progress tracking
-  const simulateModelDownload = () => {
+  // Actual implementation of model download with progress tracking
+  const downloadModel = async () => {
     setIsDownloading(true);
     setDownloadProgress(0);
+    setDownloadError(null);
     
-    // In a real implementation, this would use the Hugging Face transformers.js library
-    // For example:
-    // import { pipeline } from '@huggingface/transformers';
-    // const model = await pipeline('text-generation', `meta-llama/${agent.selectedModel}`);
-    
-    // For now, we'll simulate the download with a timer
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += Math.random() * 5;
-      if (progress >= 100) {
-        clearInterval(interval);
-        setIsDownloading(false);
-        setAgent((prev) => ({ ...prev, isModelDownloaded: true }));
-        // Save updated state to localStorage
-        localStorage.setItem("agentDraft", JSON.stringify({...agent, isModelDownloaded: true}));
-        
-        toast({
-          title: "Model Downloaded Successfully",
-          description: "The model has been downloaded and is ready to use.",
-        });
-        setDownloadProgress(100);
-      } else {
-        setDownloadProgress(Math.min(progress, 99));
-      }
-    }, 300);
+    try {
+      // Setup progress callback
+      const progressCallback = (progress: { progress: number }) => {
+        setDownloadProgress(Math.round(progress.progress * 100));
+      };
+
+      // Use the Hugging Face transformers.js library to download and set up the model
+      const modelId = "meta-llama/Meta-Llama-3.2-3B";
+      console.log(`Starting download of model: ${modelId}`);
+      
+      // Initialize the text-generation pipeline with progress tracking
+      const textGenerationPipeline = await pipeline(
+        'text-generation',
+        modelId,
+        {
+          progress_callback: progressCallback,
+          quantized: true, // Use quantized model for better performance
+          token: HF_TOKEN
+        }
+      );
+      
+      console.log("Model download complete");
+      
+      // Update agent state with the downloaded model
+      setAgent((prev) => {
+        const updatedAgent = { 
+          ...prev, 
+          isModelDownloaded: true, 
+          model: textGenerationPipeline 
+        };
+        localStorage.setItem("agentDraft", JSON.stringify({
+          ...updatedAgent,
+          model: null // Don't store the actual model in localStorage
+        }));
+        return updatedAgent;
+      });
+      
+      setIsDownloading(false);
+      setDownloadProgress(100);
+      
+      toast({
+        title: "Model Downloaded Successfully",
+        description: "The model has been downloaded and is ready to use.",
+      });
+    } catch (error) {
+      console.error("Error downloading model:", error);
+      setIsDownloading(false);
+      setDownloadError(error instanceof Error ? error.message : "Unknown error occurred");
+      
+      toast({
+        title: "Download Failed",
+        description: `Error downloading model: ${error instanceof Error ? error.message : "Unknown error"}`,
+        variant: "destructive",
+      });
+    }
   };
 
   const handleCreateAgent = () => {
@@ -114,16 +151,25 @@ const AgentCreator = () => {
       return;
     }
 
+    if (!agent.isModelDownloaded) {
+      toast({
+        title: "Model Not Downloaded",
+        description: "Please download the model before creating your agent.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     // Generate a unique ID for the agent
     const agentId = Date.now().toString();
     
-    // In a real implementation, this would save the agent to a backend
-    // For now, we'll save it to localStorage
+    // Save the agent to localStorage for persistence
     const agents = JSON.parse(localStorage.getItem("agents") || "[]");
     const newAgent = {
       ...agent,
       id: agentId,
       createdAt: new Date().toISOString(),
+      model: null // Don't store the model object itself
     };
     
     localStorage.setItem("agents", JSON.stringify([...agents, newAgent]));
@@ -156,6 +202,32 @@ const AgentCreator = () => {
       title: "Template Applied",
       description: `The "${template.name}" template has been applied.`,
     });
+  };
+
+  const generateResponse = async (userPrompt: string) => {
+    if (!agent.model) return "The model is not loaded yet.";
+    
+    try {
+      // Prepare the system prompt and context
+      const context = `${agent.systemPrompt}\n\nUser: ${userPrompt}\nAssistant:`;
+      
+      // Generate response from the model
+      const response = await agent.model(context, {
+        max_new_tokens: 256,
+        temperature: 0.7,
+        top_p: 0.95,
+        do_sample: true,
+      });
+      
+      const generatedText = response[0].generated_text;
+      // Extract just the Assistant's response
+      const assistantResponse = generatedText.split("Assistant:")[1].trim();
+      
+      return assistantResponse;
+    } catch (error) {
+      console.error("Error generating response:", error);
+      return "I'm sorry, I encountered an error while processing your request.";
+    }
   };
 
   return (
@@ -285,7 +357,7 @@ const AgentCreator = () => {
                       </p>
                     </div>
                     <Button
-                      onClick={simulateModelDownload}
+                      onClick={downloadModel}
                       disabled={isDownloading || agent.isModelDownloaded}
                       className="flex items-center"
                     >
@@ -313,9 +385,16 @@ const AgentCreator = () => {
                       <Progress value={downloadProgress} className="h-2" />
                       {isDownloading && (
                         <p className="text-xs text-muted-foreground">
-                          Downloading {agent.selectedModel}... {Math.round(downloadProgress)}%
+                          Downloading model... {Math.round(downloadProgress)}%
                         </p>
                       )}
+                    </div>
+                  )}
+                  
+                  {downloadError && (
+                    <div className="bg-destructive/10 text-destructive p-3 rounded-md text-sm">
+                      <p>Error downloading model: {downloadError}</p>
+                      <p className="mt-1">Please check your internet connection and try again.</p>
                     </div>
                   )}
                 </div>
