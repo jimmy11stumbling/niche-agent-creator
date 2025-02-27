@@ -78,16 +78,29 @@ const AgentCreator = () => {
     });
   };
 
-  // Actual implementation of model download with progress tracking
+  // Fixed implementation of model download with progress tracking
   const downloadModel = async () => {
     setIsDownloading(true);
     setDownloadProgress(0);
     setDownloadError(null);
     
     try {
-      // Setup progress callback
-      const progressCallback = (progress: { progress: number }) => {
-        setDownloadProgress(Math.round(progress.progress * 100));
+      // Setup progress callback - fixed to match the correct type
+      const progressCallback = (progressInfo: any) => {
+        // Check if progressInfo has a progress property directly
+        if ('progress' in progressInfo) {
+          setDownloadProgress(Math.round(progressInfo.progress * 100));
+        } 
+        // Handle download progress event which may have a different structure
+        else if ('loaded' in progressInfo && 'total' in progressInfo) {
+          const progress = progressInfo.loaded / progressInfo.total;
+          setDownloadProgress(Math.round(progress * 100));
+        }
+        // Handle initiate events or other progress info without numeric progress
+        else {
+          console.log("Progress event:", progressInfo);
+          // Don't update progress bar for non-numeric progress events
+        }
       };
 
       // Use the Hugging Face transformers.js library to download and set up the model
