@@ -1,1003 +1,1635 @@
 
-import { useState, useRef, useCallback, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import { v4 as uuidv4 } from "uuid";
-import { toast } from "sonner";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useState, useEffect, useRef } from "react";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { 
+  Dialog, DialogContent, DialogDescription, DialogFooter, 
+  DialogHeader, DialogTitle, DialogTrigger
+} from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Workflow, Task, Transition, TaskType, ActionType } from "@/types/workflow";
-import {
-  PlusIcon,
-  SaveIcon,
-  PlayIcon,
-  TrashIcon,
-  ArrowRightIcon,
-  Settings2Icon,
-  AlertCircleIcon,
-  GripVertical,
-  Link2Icon,
-  XIcon,
-  EyeIcon,
-  FileIcon,
-  FileTextIcon,
-  DatabaseIcon,
-  MailIcon,
-  CodeIcon
+import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { useQuery } from "@tanstack/react-query";
+import { Task, Workflow, Transition, TaskType, ActionType } from "@/types/workflow";
+import { v4 as uuidv4 } from "uuid";
+import { 
+  Plus, Save, Play, Trash2, Settings, ArrowRight, Check, Copy, 
+  FileDown, FileUp, AlertTriangle, CheckCircle, ZapIcon, AlertCircle, XCircle 
 } from "lucide-react";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-// Enhanced Mock API functions with more realistic behavior
-const mockFetchWorkflow = async (id: string): Promise<Workflow> => {
-  console.log("Fetching workflow with ID:", id);
-  
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 800));
-  
-  // Check if workflow exists in localStorage
-  const savedWorkflows = JSON.parse(localStorage.getItem("workflows") || "[]");
-  const existingWorkflow = savedWorkflows.find((wf: Workflow) => wf.id === id);
-  
-  if (existingWorkflow) {
-    console.log("Found existing workflow:", existingWorkflow);
-    return existingWorkflow;
-  }
-  
-  // For demo purposes, return a sample workflow if none exists
-  return {
-    id,
-    name: "Sample Workflow",
-    description: "A sample workflow for demonstration",
-    tasks: [
-      {
-        id: "task1",
-        name: "Start",
-        type: "Trigger",
-        parameters: {},
-        dependencies: [],
-        position: { x: 100, y: 200 }
-      },
-      {
-        id: "task2",
-        name: "Process Data",
-        type: "Action",
-        actionType: "HttpRequest",
-        parameters: {
-          url: "https://api.example.com/data",
-          method: "GET"
-        },
-        dependencies: ["task1"],
-        position: { x: 400, y: 200 }
-      },
-      {
-        id: "task3",
-        name: "Check Result",
-        type: "Condition",
-        conditionLogic: "data.status === 'success'",
-        parameters: {},
-        dependencies: ["task2"],
-        position: { x: 700, y: 200 }
-      }
-    ],
-    transitions: [
-      {
-        id: "transition1",
-        sourceTaskId: "task1",
-        targetTaskId: "task2"
-      },
-      {
-        id: "transition2",
-        sourceTaskId: "task2",
-        targetTaskId: "task3"
-      }
-    ],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    version: 1
+// Default workflow template
+const DEFAULT_WORKFLOW: Workflow = {
+  id: uuidv4(),
+  name: "New Workflow",
+  description: "Workflow description",
+  tasks: [],
+  transitions: [],
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  version: 1,
+};
+
+// Task templates for different task types
+const TASK_TEMPLATES: Record<TaskType, Partial<Task>> = {
+  "Trigger": {
+    type: "Trigger",
+    parameters: { schedule: "0 0 * * *" }, // Daily at midnight
+    dependencies: [],
+  },
+  "Action": {
+    type: "Action",
+    actionType: "HttpRequest",
+    parameters: { url: "", method: "GET" },
+    dependencies: [],
+  },
+  "Condition": {
+    type: "Condition",
+    conditionLogic: "data.value > 10",
+    parameters: {},
+    dependencies: [],
+  },
+  "SubWorkflow": {
+    type: "SubWorkflow",
+    subWorkflowId: "",
+    parameters: {},
+    dependencies: [],
+  },
+};
+
+// Action type specific parameters
+const ACTION_TYPE_PARAMS: Record<ActionType, Record<string, any>> = {
+  "HttpRequest": { url: "", method: "GET", headers: {}, body: "" },
+  "DatabaseOperation": { operation: "query", query: "", parameters: {} },
+  "MessageQueue": { queue: "", message: "" },
+  "ScriptExecution": { script: "", args: [] },
+  "DummyAction": { delayMs: 1000, result: "success" },
+};
+
+interface TaskNodeProps {
+  task: Task;
+  selected: boolean;
+  onSelect: (id: string) => void;
+  onMove: (id: string, position: { x: number; y: number }) => void;
+}
+
+// TaskNode component for visual representation of tasks
+const TaskNode: React.FC<TaskNodeProps> = ({ task, selected, onSelect, onMove }) => {
+  const nodeRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+
+  // Get the background color based on task type
+  const getBackgroundColor = () => {
+    switch (task.type) {
+      case "Trigger":
+        return "bg-blue-100 border-blue-300";
+      case "Action":
+        return "bg-green-100 border-green-300";
+      case "Condition":
+        return "bg-amber-100 border-amber-300";
+      case "SubWorkflow":
+        return "bg-purple-100 border-purple-300";
+      default:
+        return "bg-slate-100 border-slate-300";
+    }
   };
-};
 
-// Enhanced save workflow function with localStorage persistence
-const mockSaveWorkflow = async (workflow: Workflow): Promise<Workflow> => {
-  console.log("Saving workflow:", workflow);
-  
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  
-  const updatedWorkflow = {
-    ...workflow,
-    updatedAt: new Date().toISOString(),
-    version: workflow.version + 1
+  // Get the icon based on task type
+  const getIcon = () => {
+    switch (task.type) {
+      case "Trigger":
+        return <ZapIcon className="h-4 w-4 text-blue-600" />;
+      case "Action":
+        return <Play className="h-4 w-4 text-green-600" />;
+      case "Condition":
+        return <AlertCircle className="h-4 w-4 text-amber-600" />;
+      case "SubWorkflow":
+        return <Copy className="h-4 w-4 text-purple-600" />;
+      default:
+        return null;
+    }
   };
-  
-  // Save to localStorage
-  const savedWorkflows = JSON.parse(localStorage.getItem("workflows") || "[]");
-  const existingIndex = savedWorkflows.findIndex((wf: Workflow) => wf.id === workflow.id);
-  
-  if (existingIndex >= 0) {
-    savedWorkflows[existingIndex] = updatedWorkflow;
-  } else {
-    savedWorkflows.push(updatedWorkflow);
-  }
-  
-  localStorage.setItem("workflows", JSON.stringify(savedWorkflows));
-  return updatedWorkflow;
-};
 
-// Enhanced run workflow function with execution history
-const mockRunWorkflow = async (workflowId: string): Promise<{ executionId: string }> => {
-  console.log("Running workflow:", workflowId);
-  
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  
-  const executionId = uuidv4();
-  
-  // Save execution record to localStorage
-  const executions = JSON.parse(localStorage.getItem("workflow_executions") || "[]");
-  executions.push({
-    id: executionId,
-    workflowId,
-    status: "completed", // In a real system, this would initially be "running"
-    startTime: new Date().toISOString(),
-    endTime: new Date(Date.now() + 5000).toISOString(), // Simulate a 5-second run
-    taskResults: []
-  });
-  
-  localStorage.setItem("workflow_executions", JSON.stringify(executions));
-  return { executionId };
-};
-
-const WorkflowDesigner = () => {
-  const { workflowId } = useParams<{ workflowId: string }>();
-  const navigate = useNavigate();
-  const canvasRef = useRef<HTMLDivElement>(null);
-  
-  const [workflow, setWorkflow] = useState<Workflow>({
-    id: workflowId || uuidv4(),
-    name: "New Workflow",
-    description: "",
-    tasks: [],
-    transitions: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    version: 1
-  });
-  
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [selectedTransition, setSelectedTransition] = useState<Transition | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
-  const [currentTab, setCurrentTab] = useState("designer");
-  const [isAddingTransition, setIsAddingTransition] = useState(false);
-  const [transitionSource, setTransitionSource] = useState<string | null>(null);
-  const [showWorkflowTemplates, setShowWorkflowTemplates] = useState(false);
-  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
-  
-  // Fix: Use useQuery with the proper approach for handling data
-  const { isLoading: isLoadingWorkflow, data: workflowData } = useQuery({
-    queryKey: ['workflow', workflowId],
-    queryFn: () => workflowId ? mockFetchWorkflow(workflowId) : null,
-    enabled: !!workflowId
-  });
-
-  // Use useEffect to handle the data when it's available
-  useEffect(() => {
-    if (workflowData) {
-      setWorkflow(workflowData);
-    }
-  }, [workflowData]);
-  
-  // Mutation for saving workflow
-  const saveWorkflowMutation = useMutation({
-    mutationFn: mockSaveWorkflow,
-    onSuccess: (data) => {
-      setWorkflow(data);
-      toast.success("Workflow saved successfully");
-      if (!workflowId) {
-        navigate(`/workflows/designer/${data.id}`);
-      }
-    },
-    onError: (error) => {
-      toast.error("Failed to save workflow");
-      console.error("Failed to save workflow:", error);
-    }
-  });
-  
-  // Mutation for running workflow
-  const runWorkflowMutation = useMutation({
-    mutationFn: () => mockRunWorkflow(workflow.id),
-    onSuccess: (data) => {
-      toast.success(`Workflow execution started: ${data.executionId}`);
-      navigate(`/workflows?execution=${data.executionId}`);
-    },
-    onError: (error) => {
-      toast.error("Failed to run workflow");
-      console.error("Failed to run workflow:", error);
-    }
-  });
-  
-  // Enhanced task creation with improved positioning
-  const handleAddTask = (type: TaskType) => {
-    // Calculate a good position for the new task
-    let newPosition = { x: 200, y: 200 };
-    
-    if (workflow.tasks.length > 0) {
-      // Find the rightmost task
-      const rightmostTask = workflow.tasks.reduce((prev, current) => {
-        return (prev.position.x > current.position.x) ? prev : current;
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (nodeRef.current) {
+      setDragging(true);
+      const rect = nodeRef.current.getBoundingClientRect();
+      setOffset({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
       });
-      
-      // Place new task to the right with some spacing
-      newPosition = {
-        x: rightmostTask.position.x + 250,
-        y: rightmostTask.position.y
-      };
+      onSelect(task.id);
+      e.stopPropagation();
     }
-    
-    const newTask: Task = {
-      id: uuidv4(),
-      name: `New ${type}`,
-      type,
-      parameters: {},
-      dependencies: [],
-      position: newPosition
-    };
-    
-    // Add specific properties based on task type
-    if (type === 'Action') {
-      newTask.actionType = 'HttpRequest';
-    } else if (type === 'Condition') {
-      newTask.conditionLogic = '';
-    }
-    
-    setWorkflow(prev => ({
-      ...prev,
-      tasks: [...prev.tasks, newTask]
-    }));
-    
-    setSelectedTask(newTask);
   };
-  
-  // Handle task selection
-  const handleSelectTask = (taskId: string) => {
-    if (isAddingTransition) {
-      if (transitionSource) {
-        // Complete the transition creation
-        handleAddTransition(transitionSource, taskId);
-        setIsAddingTransition(false);
-        setTransitionSource(null);
-      } else {
-        // Start the transition creation
-        setTransitionSource(taskId);
-        toast.info("Now select a destination task to create a connection");
+
+  const handleMouseMove = (e: MouseEvent) => {
+    if (dragging && nodeRef.current) {
+      const canvas = nodeRef.current.parentElement;
+      if (canvas) {
+        const canvasRect = canvas.getBoundingClientRect();
+        const newX = e.clientX - canvasRect.left - offset.x;
+        const newY = e.clientY - canvasRect.top - offset.y;
+        
+        onMove(task.id, { x: newX, y: newY });
       }
-      return;
+    }
+  };
+
+  const handleMouseUp = () => {
+    setDragging(false);
+  };
+
+  useEffect(() => {
+    if (dragging) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    } else {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
     }
     
-    const task = workflow.tasks.find(t => t.id === taskId) || null;
-    setSelectedTask(task);
-    setSelectedTransition(null);
-  };
-  
-  // Handle task update with improved validation
-  const handleUpdateTask = (updatedTask: Task) => {
-    // Validate task data before updating
-    if (!updatedTask.name.trim()) {
-      toast.error("Task name cannot be empty");
-      return;
-    }
-    
-    setWorkflow(prev => ({
-      ...prev,
-      tasks: prev.tasks.map(t => t.id === updatedTask.id ? updatedTask : t)
-    }));
-    setSelectedTask(updatedTask);
-  };
-  
-  // Enhanced task deletion with proper transition cleanup
-  const handleDeleteTask = (taskId: string) => {
-    setWorkflow(prev => ({
-      ...prev,
-      tasks: prev.tasks.filter(t => t.id !== taskId),
-      transitions: prev.transitions.filter(
-        t => t.sourceTaskId !== taskId && t.targetTaskId !== taskId
-      )
-    }));
-    
-    if (selectedTask?.id === taskId) {
-      setSelectedTask(null);
-    }
-    
-    toast.success("Task deleted");
-  };
-  
-  // Start transition creation mode
-  const handleStartTransition = (sourceTaskId: string) => {
-    setIsAddingTransition(true);
-    setTransitionSource(sourceTaskId);
-    toast.info("Now select a destination task to create a connection");
-  };
-  
-  // Cancel transition creation
-  const handleCancelTransition = () => {
-    setIsAddingTransition(false);
-    setTransitionSource(null);
-  };
-  
-  // Handle transition creation with validation
-  const handleAddTransition = (sourceTaskId: string, targetTaskId: string) => {
-    // Validate the transition
-    if (sourceTaskId === targetTaskId) {
-      toast.error("Cannot create a transition to the same task");
-      return;
-    }
-    
-    // Check if this transition already exists
-    const existingTransition = workflow.transitions.find(
-      t => t.sourceTaskId === sourceTaskId && t.targetTaskId === targetTaskId
-    );
-    
-    if (existingTransition) {
-      toast.error("This connection already exists");
-      return;
-    }
-    
-    const newTransition: Transition = {
-      id: uuidv4(),
-      sourceTaskId,
-      targetTaskId
-    };
-    
-    setWorkflow(prev => ({
-      ...prev,
-      transitions: [...prev.transitions, newTransition]
-    }));
-    
-    setSelectedTransition(newTransition);
-    toast.success("Connection created");
-  };
-  
-  // Handle transition selection
-  const handleSelectTransition = (transitionId: string) => {
-    const transition = workflow.transitions.find(t => t.id === transitionId) || null;
-    setSelectedTransition(transition);
-    setSelectedTask(null);
-  };
-  
-  // Handle transition update
-  const handleUpdateTransition = (updatedTransition: Transition) => {
-    setWorkflow(prev => ({
-      ...prev,
-      transitions: prev.transitions.map(t => 
-        t.id === updatedTransition.id ? updatedTransition : t
-      )
-    }));
-    setSelectedTransition(updatedTransition);
-  };
-  
-  // Handle transition deletion
-  const handleDeleteTransition = (transitionId: string) => {
-    setWorkflow(prev => ({
-      ...prev,
-      transitions: prev.transitions.filter(t => t.id !== transitionId)
-    }));
-    
-    if (selectedTransition?.id === transitionId) {
-      setSelectedTransition(null);
-    }
-    
-    toast.success("Connection deleted");
-  };
-  
-  // Enhanced drag and drop functionality for tasks
-  const handleTaskMouseDown = (e: React.MouseEvent, taskId: string) => {
-    if (isAddingTransition) return; // Don't start dragging in transition mode
-    
-    const task = workflow.tasks.find(t => t.id === taskId);
-    if (!task) return;
-    
-    setIsDragging(true);
-    setSelectedTask(task);
-    setSelectedTransition(null);
-    
-    const rect = (e.target as HTMLElement).getBoundingClientRect();
-    const offsetX = e.clientX - rect.left;
-    const offsetY = e.clientY - rect.top;
-    
-    setDragStartPos({ x: offsetX, y: offsetY });
-    
-    // Add event listeners to window for mouse move and up
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging || !canvasRef.current) return;
-      
-      const canvasRect = canvasRef.current.getBoundingClientRect();
-      const newX = e.clientX - canvasRect.left - dragStartPos.x;
-      const newY = e.clientY - canvasRect.top - dragStartPos.y;
-      
-      // Update task position
-      setWorkflow(prev => ({
-        ...prev,
-        tasks: prev.tasks.map(t => t.id === taskId 
-          ? { ...t, position: { x: Math.max(0, newX), y: Math.max(0, newY) } } 
-          : t)
-      }));
-    };
-    
-    const handleMouseUp = () => {
-      setIsDragging(false);
+    return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-    
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+  }, [dragging]);
+
+  return (
+    <div
+      ref={nodeRef}
+      className={`absolute p-3 rounded-lg cursor-grab shadow-sm border ${getBackgroundColor()} ${
+        selected ? "ring-2 ring-primary" : ""
+      }`}
+      style={{
+        left: `${task.position.x}px`,
+        top: `${task.position.y}px`,
+        minWidth: "160px",
+      }}
+      onMouseDown={handleMouseDown}
+      onClick={() => onSelect(task.id)}
+    >
+      <div className="flex items-center space-x-2">
+        {getIcon()}
+        <span className="font-medium text-sm">{task.name}</span>
+      </div>
+      <div className="text-xs text-muted-foreground mt-1">{task.type}</div>
+    </div>
+  );
+};
+
+interface TransitionLineProps {
+  sourceTask: Task;
+  targetTask: Task;
+  condition?: string;
+  selected: boolean;
+}
+
+// TransitionLine component for visualizing connections between tasks
+const TransitionLine: React.FC<TransitionLineProps> = ({
+  sourceTask,
+  targetTask,
+  condition,
+  selected,
+}) => {
+  // Calculate the center points of the tasks
+  const sourceCenter = {
+    x: sourceTask.position.x + 80, // Assuming task width is approximately 160px
+    y: sourceTask.position.y + 30, // Assuming task height is approximately 60px
   };
   
-  // Validate workflow
-  const validateWorkflow = (): boolean => {
-    const errors: string[] = [];
+  const targetCenter = {
+    x: targetTask.position.x + 80,
+    y: targetTask.position.y + 30,
+  };
 
-    // Check if workflow has a name
-    if (!workflow.name.trim()) {
-      errors.push("Workflow name cannot be empty");
+  // Calculate the path for a curved line
+  const midX = (sourceCenter.x + targetCenter.x) / 2;
+  const midY = (sourceCenter.y + targetCenter.y) / 2;
+  
+  const path = `M ${sourceCenter.x} ${sourceCenter.y} Q ${midX + 30} ${midY} ${targetCenter.x} ${targetCenter.y}`;
+
+  return (
+    <g>
+      <path
+        d={path}
+        fill="none"
+        stroke={selected ? "#0284c7" : "#94a3b8"}
+        strokeWidth={selected ? 2 : 1.5}
+        strokeDasharray={condition ? "5,5" : undefined}
+      />
+      <polygon
+        points={`${targetCenter.x},${targetCenter.y} ${targetCenter.x - 6},${targetCenter.y - 4} ${targetCenter.x - 6},${targetCenter.y + 4}`}
+        fill={selected ? "#0284c7" : "#94a3b8"}
+        transform={`rotate(${Math.atan2(
+          targetCenter.y - midY,
+          targetCenter.x - midX
+        ) * (180 / Math.PI)}, ${targetCenter.x}, ${targetCenter.y})`}
+      />
+      
+      {condition && (
+        <text
+          x={midX}
+          y={midY - 10}
+          textAnchor="middle"
+          fill="#6b7280"
+          fontSize="10"
+          fontFamily="sans-serif"
+          className="select-none"
+        >
+          {condition.length > 20 ? condition.substring(0, 20) + "..." : condition}
+        </text>
+      )}
+    </g>
+  );
+};
+
+interface WorkflowDesignerProps {
+  workflowId?: string;
+}
+
+const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({ workflowId }) => {
+  const [workflow, setWorkflow] = useState<Workflow>(DEFAULT_WORKFLOW);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedTransitionId, setSelectedTransitionId] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState<boolean>(false);
+  const [connectingSourceId, setConnectingSourceId] = useState<string | null>(null);
+  const [connectionInProgress, setConnectionInProgress] = useState<{
+    sourceId: string;
+    targetPos: { x: number; y: number };
+  } | null>(null);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [showValidationDialog, setShowValidationDialog] = useState<boolean>(false);
+  const [taskBeingEdited, setTaskBeingEdited] = useState<Task | null>(null);
+  const [transitionBeingEdited, setTransitionBeingEdited] = useState<Transition | null>(null);
+  const [savedWorkflows, setSavedWorkflows] = useState<Workflow[]>([]);
+  const [activeTab, setActiveTab] = useState<string>("editor");
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isDirty, setIsDirty] = useState<boolean>(false);
+  const [showSaveDialog, setShowSaveDialog] = useState<boolean>(false);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+
+  // Template gallery with predefined workflows
+  const workflowTemplates = [
+    {
+      id: "scheduled-http-request",
+      name: "Scheduled HTTP Request",
+      description: "Regularly fetch data from an API",
+      category: "Data Integration",
+      workflow: {
+        id: uuidv4(),
+        name: "Scheduled API Fetch",
+        description: "Fetch data from an API on a schedule",
+        tasks: [
+          {
+            id: uuidv4(),
+            name: "Daily Trigger",
+            type: "Trigger" as TaskType,
+            parameters: { schedule: "0 9 * * *" },
+            dependencies: [],
+            position: { x: 100, y: 100 },
+          },
+          {
+            id: uuidv4(),
+            name: "Fetch Data",
+            type: "Action" as TaskType,
+            actionType: "HttpRequest" as ActionType,
+            parameters: { url: "https://api.example.com/data", method: "GET" },
+            dependencies: [],
+            position: { x: 300, y: 100 },
+          },
+        ],
+        transitions: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        version: 1,
+      },
+    },
+    {
+      id: "conditional-execution",
+      name: "Conditional Execution",
+      description: "Execute different paths based on conditions",
+      category: "Process Automation",
+      workflow: {
+        id: uuidv4(),
+        name: "Conditional Workflow",
+        description: "Branch execution based on conditions",
+        tasks: [
+          {
+            id: uuidv4(),
+            name: "Start",
+            type: "Trigger" as TaskType,
+            parameters: { schedule: "manual" },
+            dependencies: [],
+            position: { x: 100, y: 150 },
+          },
+          {
+            id: uuidv4(),
+            name: "Check Value",
+            type: "Condition" as TaskType,
+            conditionLogic: "data.value > 100",
+            parameters: {},
+            dependencies: [],
+            position: { x: 300, y: 150 },
+          },
+          {
+            id: uuidv4(),
+            name: "High Value Action",
+            type: "Action" as TaskType,
+            actionType: "DummyAction" as ActionType,
+            parameters: { result: "high_value_processed" },
+            dependencies: [],
+            position: { x: 500, y: 50 },
+          },
+          {
+            id: uuidv4(),
+            name: "Low Value Action",
+            type: "Action" as TaskType,
+            actionType: "DummyAction" as ActionType,
+            parameters: { result: "low_value_processed" },
+            dependencies: [],
+            position: { x: 500, y: 250 },
+          },
+        ],
+        transitions: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        version: 1,
+      },
+    },
+  ];
+
+  // Mock function to fetch workflow
+  const fetchWorkflow = async (id: string): Promise<Workflow> => {
+    // In a real app, this would be an API call
+    const savedWorkflowsString = localStorage.getItem("workflows");
+    const savedWorkflows = savedWorkflowsString
+      ? JSON.parse(savedWorkflowsString)
+      : [];
+
+    const foundWorkflow = savedWorkflows.find((w: Workflow) => w.id === id);
+    if (foundWorkflow) {
+      return foundWorkflow;
+    }
+
+    throw new Error("Workflow not found");
+  };
+
+  // Setup query to fetch workflow if ID is provided
+  const { data: fetchedWorkflow } = useQuery({
+    queryKey: ["workflow", workflowId],
+    queryFn: () => workflowId ? fetchWorkflow(workflowId) : Promise.resolve(null),
+    enabled: !!workflowId,
+  });
+
+  // Update workflow when fetched data changes
+  useEffect(() => {
+    if (fetchedWorkflow) {
+      setWorkflow(fetchedWorkflow);
+    }
+  }, [fetchedWorkflow]);
+
+  // Load saved workflows
+  useEffect(() => {
+    const savedWorkflowsString = localStorage.getItem("workflows");
+    if (savedWorkflowsString) {
+      try {
+        const parsed = JSON.parse(savedWorkflowsString);
+        setSavedWorkflows(parsed);
+      } catch (e) {
+        console.error("Error parsing saved workflows:", e);
+      }
+    }
+  }, []);
+
+  // Helper to find a task by ID
+  const getTaskById = (id: string) => {
+    return workflow.tasks.find((task) => task.id === id) || null;
+  };
+
+  // Add a new task to the workflow
+  const handleAddTask = (type: TaskType) => {
+    const newTaskId = uuidv4();
+    const centerX = canvasRef.current ? canvasRef.current.clientWidth / 2 - 80 : 300;
+    const centerY = canvasRef.current ? canvasRef.current.clientHeight / 2 - 30 : 200;
+    
+    const newTask: Task = {
+      id: newTaskId,
+      name: `New ${type}`,
+      ...TASK_TEMPLATES[type],
+      position: { x: centerX, y: centerY },
+    } as Task;
+    
+    setWorkflow((prev) => ({
+      ...prev,
+      tasks: [...prev.tasks, newTask],
+      updatedAt: new Date().toISOString(),
+    }));
+    
+    setSelectedTaskId(newTaskId);
+    setIsDirty(true);
+    
+    toast({
+      title: "Task Added",
+      description: `Added a new ${type} task to the workflow`,
+    });
+  };
+
+  // Start creating a connection between tasks
+  const handleStartConnecting = (sourceId: string) => {
+    setConnecting(true);
+    setConnectingSourceId(sourceId);
+  };
+
+  // Update the position of a connection in progress
+  const handleCanvasMouseMove = (e: React.MouseEvent) => {
+    if (connecting && connectingSourceId && canvasRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      
+      setConnectionInProgress({
+        sourceId: connectingSourceId,
+        targetPos: { x, y },
+      });
+    }
+  };
+
+  // Complete a connection between tasks
+  const handleCanvasClick = (e: React.MouseEvent) => {
+    // If not connecting or a task is already selected, do nothing
+    if (!connecting || !connectingSourceId) {
+      if (!selectedTaskId && !selectedTransitionId) {
+        // Deselect everything when clicking on the canvas
+        setSelectedTaskId(null);
+        setSelectedTransitionId(null);
+      }
+      return;
     }
     
-    // Check if workflow has at least one task
+    setConnecting(false);
+    setConnectionInProgress(null);
+    setConnectingSourceId(null);
+  };
+
+  // Create a connection when a task is clicked while connecting
+  const handleTaskSelectWhileConnecting = (targetId: string) => {
+    if (connecting && connectingSourceId) {
+      // Check if connection already exists
+      const existingConnection = workflow.transitions.find(
+        (t) => t.sourceTaskId === connectingSourceId && t.targetTaskId === targetId
+      );
+      
+      if (existingConnection) {
+        toast({
+          title: "Connection Exists",
+          description: "This connection already exists",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Check if it's the same task
+      if (connectingSourceId === targetId) {
+        toast({
+          title: "Invalid Connection",
+          description: "Cannot connect a task to itself",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      const newTransitionId = uuidv4();
+      const newTransition: Transition = {
+        id: newTransitionId,
+        sourceTaskId: connectingSourceId,
+        targetTaskId: targetId,
+      };
+      
+      setWorkflow((prev) => ({
+        ...prev,
+        transitions: [...prev.transitions, newTransition],
+        updatedAt: new Date().toISOString(),
+      }));
+      
+      setSelectedTransitionId(newTransitionId);
+      setIsDirty(true);
+      
+      toast({
+        title: "Connection Created",
+        description: "Tasks connected successfully",
+      });
+    }
+    
+    // End connecting mode
+    setConnecting(false);
+    setConnectionInProgress(null);
+    setConnectingSourceId(null);
+  };
+
+  // Handle task selection
+  const handleTaskSelect = (id: string) => {
+    if (connecting && connectingSourceId) {
+      handleTaskSelectWhileConnecting(id);
+    } else {
+      setSelectedTaskId(id);
+      setSelectedTransitionId(null);
+    }
+  };
+
+  // Handle transition selection
+  const handleTransitionSelect = (id: string) => {
+    setSelectedTransitionId(id);
+    setSelectedTaskId(null);
+  };
+
+  // Move a task to a new position
+  const handleTaskMove = (id: string, position: { x: number; y: number }) => {
+    setWorkflow((prev) => ({
+      ...prev,
+      tasks: prev.tasks.map((task) =>
+        task.id === id ? { ...task, position } : task
+      ),
+      updatedAt: new Date().toISOString(),
+    }));
+    setIsDirty(true);
+  };
+
+  // Delete a selected task
+  const handleDeleteTask = () => {
+    if (selectedTaskId) {
+      // First, remove all transitions connected to this task
+      const filteredTransitions = workflow.transitions.filter(
+        (t) => t.sourceTaskId !== selectedTaskId && t.targetTaskId !== selectedTaskId
+      );
+      
+      setWorkflow((prev) => ({
+        ...prev,
+        tasks: prev.tasks.filter((task) => task.id !== selectedTaskId),
+        transitions: filteredTransitions,
+        updatedAt: new Date().toISOString(),
+      }));
+      
+      setSelectedTaskId(null);
+      setIsDirty(true);
+      
+      toast({
+        title: "Task Deleted",
+        description: "Task and its connections removed",
+      });
+    }
+  };
+
+  // Delete a selected transition
+  const handleDeleteTransition = () => {
+    if (selectedTransitionId) {
+      setWorkflow((prev) => ({
+        ...prev,
+        transitions: prev.transitions.filter((t) => t.id !== selectedTransitionId),
+        updatedAt: new Date().toISOString(),
+      }));
+      
+      setSelectedTransitionId(null);
+      setIsDirty(true);
+      
+      toast({
+        title: "Connection Deleted",
+        description: "Connection between tasks removed",
+      });
+    }
+  };
+
+  // Save the workflow
+  const handleSaveWorkflow = () => {
+    const existingWorkflows = JSON.parse(localStorage.getItem("workflows") || "[]");
+    
+    const workflowToSave = {
+      ...workflow,
+      updatedAt: new Date().toISOString(),
+    };
+    
+    let updatedWorkflows;
+    
+    // Check if workflow already exists
+    const existingIndex = existingWorkflows.findIndex((w: Workflow) => w.id === workflow.id);
+    
+    if (existingIndex !== -1) {
+      // Update existing workflow
+      updatedWorkflows = [...existingWorkflows];
+      updatedWorkflows[existingIndex] = workflowToSave;
+    } else {
+      // Add new workflow
+      updatedWorkflows = [...existingWorkflows, workflowToSave];
+    }
+    
+    localStorage.setItem("workflows", JSON.stringify(updatedWorkflows));
+    setSavedWorkflows(updatedWorkflows);
+    setIsDirty(false);
+    
+    toast({
+      title: "Workflow Saved",
+      description: "Workflow saved successfully",
+    });
+    
+    setShowSaveDialog(false);
+  };
+
+  // Load an existing workflow
+  const handleLoadWorkflow = (workflowToLoad: Workflow) => {
+    setWorkflow(workflowToLoad);
+    setSelectedTaskId(null);
+    setSelectedTransitionId(null);
+    setIsDirty(false);
+    
+    toast({
+      title: "Workflow Loaded",
+      description: `Loaded workflow: ${workflowToLoad.name}`,
+    });
+  };
+
+  // Apply a workflow template
+  const handleApplyTemplate = (templateId: string) => {
+    const template = workflowTemplates.find((t) => t.id === templateId);
+    
+    if (template) {
+      const newId = workflowId || uuidv4();
+      
+      // Create a copy of the template workflow with a new ID
+      const newWorkflow: Workflow = {
+        ...template.workflow,
+        id: newId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      
+      // Connect tasks from the template
+      if (template.id === "scheduled-http-request" && newWorkflow.tasks.length >= 2) {
+        const triggerId = newWorkflow.tasks[0].id;
+        const actionId = newWorkflow.tasks[1].id;
+        
+        newWorkflow.transitions = [
+          {
+            id: uuidv4(),
+            sourceTaskId: triggerId,
+            targetTaskId: actionId,
+          },
+        ];
+      } else if (template.id === "conditional-execution" && newWorkflow.tasks.length >= 4) {
+        const triggerId = newWorkflow.tasks[0].id;
+        const conditionId = newWorkflow.tasks[1].id;
+        const highValueId = newWorkflow.tasks[2].id;
+        const lowValueId = newWorkflow.tasks[3].id;
+        
+        newWorkflow.transitions = [
+          {
+            id: uuidv4(),
+            sourceTaskId: triggerId,
+            targetTaskId: conditionId,
+          },
+          {
+            id: uuidv4(),
+            sourceTaskId: conditionId,
+            targetTaskId: highValueId,
+            condition: "data.value > 100",
+          },
+          {
+            id: uuidv4(),
+            sourceTaskId: conditionId,
+            targetTaskId: lowValueId,
+            condition: "data.value <= 100",
+          },
+        ];
+      }
+      
+      setWorkflow(newWorkflow);
+      setSelectedTaskId(null);
+      setSelectedTransitionId(null);
+      setIsDirty(true);
+      
+      toast({
+        title: "Template Applied",
+        description: `Applied template: ${template.name}`,
+      });
+    }
+  };
+
+  // Export workflow to JSON
+  const handleExportWorkflow = () => {
+    const workflowJson = JSON.stringify(workflow, null, 2);
+    const blob = new Blob([workflowJson], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${workflow.name.replace(/\s+/g, "_")}_workflow.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    toast({
+      title: "Workflow Exported",
+      description: "Workflow JSON has been downloaded",
+    });
+  };
+
+  // Import workflow from JSON
+  const handleImportWorkflow = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    
+    if (files && files.length > 0) {
+      const file = files[0];
+      const reader = new FileReader();
+      
+      reader.onload = (event) => {
+        if (event.target) {
+          try {
+            const importedWorkflow = JSON.parse(event.target.result as string);
+            
+            // Validate the imported workflow
+            if (!importedWorkflow.id || !importedWorkflow.tasks || !importedWorkflow.transitions) {
+              throw new Error("Invalid workflow format");
+            }
+            
+            // Assign a new ID if not loading an existing workflow
+            if (!workflowId) {
+              importedWorkflow.id = uuidv4();
+            }
+            
+            setWorkflow(importedWorkflow);
+            setSelectedTaskId(null);
+            setSelectedTransitionId(null);
+            setIsDirty(true);
+            
+            toast({
+              title: "Workflow Imported",
+              description: "Workflow loaded from JSON file",
+            });
+          } catch (error) {
+            toast({
+              title: "Import Failed",
+              description: "Invalid workflow JSON format",
+              variant: "destructive",
+            });
+          }
+        }
+      };
+      
+      reader.readAsText(file);
+    }
+  };
+
+  // Validate the workflow
+  const validateWorkflow = () => {
+    const errors: string[] = [];
+    
+    // Check for at least one task
     if (workflow.tasks.length === 0) {
       errors.push("Workflow must have at least one task");
     }
     
-    // Check if there's a trigger task
-    const hasTrigger = workflow.tasks.some(task => task.type === 'Trigger');
+    // Check for at least one trigger
+    const hasTrigger = workflow.tasks.some((task) => task.type === "Trigger");
     if (!hasTrigger) {
-      errors.push("Workflow must have at least one Trigger task");
+      errors.push("Workflow must have at least one trigger task");
     }
     
-    // Check for orphaned tasks (tasks with no connections)
-    workflow.tasks.forEach(task => {
-      if (task.type !== 'Trigger') {
-        const hasIncoming = workflow.transitions.some(t => t.targetTaskId === task.id);
-        if (!hasIncoming) {
-          errors.push(`Task "${task.name}" has no incoming connections`);
-        }
-      }
-      
-      if (task.type !== 'Action' && task.type !== 'Condition') {
-        const hasOutgoing = workflow.transitions.some(t => t.sourceTaskId === task.id);
-        if (!hasOutgoing) {
-          errors.push(`Task "${task.name}" has no outgoing connections`);
-        }
-      }
+    // Check for disconnected tasks
+    const connectedTaskIds = new Set<string>();
+    
+    // Add all source and target task IDs from transitions
+    workflow.transitions.forEach((transition) => {
+      connectedTaskIds.add(transition.sourceTaskId);
+      connectedTaskIds.add(transition.targetTaskId);
     });
     
-    // Check for cycles in the workflow
-    // This is a simplified cycle detection - a full implementation would require
-    // a more comprehensive graph traversal algorithm
-    const visited = new Set<string>();
-    const recursionStack = new Set<string>();
+    // Find disconnected tasks (except triggers which can be standalone)
+    const disconnectedTasks = workflow.tasks.filter(
+      (task) => task.type !== "Trigger" && !connectedTaskIds.has(task.id)
+    );
     
-    const hasCycle = (taskId: string): boolean => {
-      visited.add(taskId);
-      recursionStack.add(taskId);
-      
-      const outgoingTransitions = workflow.transitions.filter(t => t.sourceTaskId === taskId);
-      for (const transition of outgoingTransitions) {
-        if (!visited.has(transition.targetTaskId)) {
-          if (hasCycle(transition.targetTaskId)) {
-            return true;
-          }
-        } else if (recursionStack.has(transition.targetTaskId)) {
-          return true;
-        }
-      }
-      
-      recursionStack.delete(taskId);
-      return false;
-    };
+    if (disconnectedTasks.length > 0) {
+      errors.push(`Found ${disconnectedTasks.length} disconnected non-trigger tasks`);
+    }
     
-    const triggerTasks = workflow.tasks.filter(task => task.type === 'Trigger');
-    for (const triggerTask of triggerTasks) {
-      if (hasCycle(triggerTask.id)) {
-        errors.push("Workflow contains cycles, which are not allowed in a valid workflow");
-        break;
-      }
+    // Check for tasks with invalid types
+    const invalidTypeTasks = workflow.tasks.filter(
+      (task) => !["Trigger", "Action", "Condition", "SubWorkflow"].includes(task.type)
+    );
+    
+    if (invalidTypeTasks.length > 0) {
+      errors.push(`Found ${invalidTypeTasks.length} tasks with invalid types`);
     }
     
     setValidationErrors(errors);
+    setShowValidationDialog(true);
+    
     return errors.length === 0;
   };
-  
-  // Handle save workflow
-  const handleSaveWorkflow = () => {
-    // Validate workflow before saving
-    if (!workflow.name.trim()) {
-      toast.error("Workflow name cannot be empty");
-      return;
-    }
-    
-    saveWorkflowMutation.mutate(workflow);
-  };
-  
-  // Handle run workflow
-  const handleRunWorkflow = () => {
-    // Validate workflow before running
-    if (!validateWorkflow()) {
-      setPreviewDialogOpen(true);
-      return;
-    }
-    
-    runWorkflowMutation.mutate();
-  };
 
-  // Load workflow template
-  const handleLoadTemplate = (templateId: string) => {
-    // Here you would fetch the template from your templates repository
-    // For now, we'll just use some hardcoded templates
-    const templates = {
-      "data-sync": {
-        name: "Data Synchronization",
-        description: "Sync data between two systems",
-        tasks: [
-          {
-            id: "trigger1",
-            name: "Schedule Trigger",
-            type: "Trigger",
-            parameters: { schedule: "0 0 * * *" },
-            dependencies: [],
-            position: { x: 100, y: 200 }
-          },
-          {
-            id: "action1",
-            name: "Fetch Source Data",
-            type: "Action",
-            actionType: "HttpRequest",
-            parameters: {
-              url: "https://source-api.example.com/data",
-              method: "GET"
-            },
-            dependencies: ["trigger1"],
-            position: { x: 350, y: 200 }
-          },
-          {
-            id: "action2",
-            name: "Transform Data",
-            type: "Action",
-            actionType: "ScriptExecution",
-            parameters: {
-              script: "// Transform data here"
-            },
-            dependencies: ["action1"],
-            position: { x: 600, y: 200 }
-          },
-          {
-            id: "action3",
-            name: "Send to Target",
-            type: "Action",
-            actionType: "HttpRequest",
-            parameters: {
-              url: "https://target-api.example.com/data",
-              method: "POST"
-            },
-            dependencies: ["action2"],
-            position: { x: 850, y: 200 }
-          }
-        ],
-        transitions: [
-          {
-            id: "t1",
-            sourceTaskId: "trigger1",
-            targetTaskId: "action1"
-          },
-          {
-            id: "t2",
-            sourceTaskId: "action1",
-            targetTaskId: "action2"
-          },
-          {
-            id: "t3",
-            sourceTaskId: "action2",
-            targetTaskId: "action3"
-          }
-        ]
-      },
-      "approval-process": {
-        name: "Approval Process",
-        description: "Handle approval workflows with conditions",
-        tasks: [
-          {
-            id: "trigger1",
-            name: "Request Submitted",
-            type: "Trigger",
-            parameters: {},
-            dependencies: [],
-            position: { x: 100, y: 200 }
-          },
-          {
-            id: "condition1",
-            name: "Check Amount",
-            type: "Condition",
-            conditionLogic: "data.amount > 1000",
-            parameters: {},
-            dependencies: ["trigger1"],
-            position: { x: 350, y: 200 }
-          },
-          {
-            id: "action1",
-            name: "Manager Approval",
-            type: "Action",
-            actionType: "HttpRequest",
-            parameters: {
-              url: "https://api.example.com/notify/manager",
-              method: "POST"
-            },
-            dependencies: ["condition1"],
-            position: { x: 600, y: 100 }
-          },
-          {
-            id: "action2",
-            name: "Auto Approval",
-            type: "Action",
-            actionType: "DatabaseOperation",
-            parameters: {
-              operation: "UPDATE",
-              table: "requests",
-              data: { status: "approved" }
-            },
-            dependencies: ["condition1"],
-            position: { x: 600, y: 300 }
-          }
-        ],
-        transitions: [
-          {
-            id: "t1",
-            sourceTaskId: "trigger1",
-            targetTaskId: "condition1"
-          },
-          {
-            id: "t2",
-            sourceTaskId: "condition1",
-            targetTaskId: "action1",
-            condition: "data.amount > 1000"
-          },
-          {
-            id: "t3",
-            sourceTaskId: "condition1",
-            targetTaskId: "action2",
-            condition: "data.amount <= 1000"
-          }
-        ]
-      }
-    };
+  // Run the workflow (simulation)
+  const handleRunWorkflow = () => {
+    if (!validateWorkflow()) {
+      return;
+    }
     
-    const template = templates[templateId as keyof typeof templates];
-    if (template) {
-      const newWorkflow = {
-        ...workflow,
-        name: template.name,
-        description: template.description,
-        tasks: template.tasks,
-        transitions: template.transitions
+    setIsLoading(true);
+    
+    // Simulate workflow execution
+    setTimeout(() => {
+      toast({
+        title: "Workflow Started",
+        description: "Workflow execution has been initiated",
+      });
+      
+      // Record execution in localStorage
+      const executions = JSON.parse(localStorage.getItem("workflowExecutions") || "[]");
+      const newExecution = {
+        id: uuidv4(),
+        workflowId: workflow.id,
+        workflowVersion: workflow.version,
+        status: "Running",
+        startTime: new Date().toISOString(),
+        tasks: workflow.tasks.map((task) => ({
+          taskId: task.id,
+          status: "Pending",
+        })),
       };
       
-      setWorkflow(newWorkflow);
-      setShowWorkflowTemplates(false);
-      toast.success(`Template "${template.name}" applied successfully`);
+      executions.push(newExecution);
+      localStorage.setItem("workflowExecutions", JSON.stringify(executions));
+      
+      // Simulate execution completion after delay
+      setTimeout(() => {
+        const updatedExecutions = JSON.parse(
+          localStorage.getItem("workflowExecutions") || "[]"
+        );
+        const executionIndex = updatedExecutions.findIndex(
+          (e: any) => e.id === newExecution.id
+        );
+        
+        if (executionIndex !== -1) {
+          updatedExecutions[executionIndex] = {
+            ...updatedExecutions[executionIndex],
+            status: "Completed",
+            endTime: new Date().toISOString(),
+            tasks: workflow.tasks.map((task) => ({
+              taskId: task.id,
+              status: "Completed",
+              startTime: new Date(Date.now() - 5000).toISOString(),
+              endTime: new Date().toISOString(),
+            })),
+          };
+          
+          localStorage.setItem(
+            "workflowExecutions",
+            JSON.stringify(updatedExecutions)
+          );
+          
+          toast({
+            title: "Workflow Completed",
+            description: "Workflow execution finished successfully",
+          });
+        }
+        
+        setIsLoading(false);
+      }, 3000);
+    }, 1000);
+  };
+
+  // Edit a task's properties
+  const handleEditTask = () => {
+    if (selectedTaskId) {
+      const task = getTaskById(selectedTaskId);
+      if (task) {
+        setTaskBeingEdited({ ...task });
+      }
     }
   };
-  
-  // Enhanced canvas rendering with improved visuals and interaction
-  const renderCanvas = () => {
-    return (
-      <div 
-        ref={canvasRef}
-        className={`relative w-full h-[600px] bg-slate-50 border rounded-lg overflow-auto ${
-          isAddingTransition ? 'cursor-crosshair' : 'cursor-default'
-        }`}
-        onClick={() => {
-          if (isAddingTransition) {
-            handleCancelTransition();
-          }
-        }}
-      >
-        {/* Grid background for better visual orientation */}
-        <div className="absolute inset-0" style={{
-          backgroundImage: 'radial-gradient(circle, #e5e7eb 1px, transparent 1px)',
-          backgroundSize: '25px 25px'
-        }}></div>
-        
-        {/* Render transitions first (so they appear beneath tasks) */}
-        <svg className="absolute inset-0 pointer-events-none">
-          <defs>
-            <marker
-              id="arrowhead"
-              markerWidth="10"
-              markerHeight="7"
-              refX="9"
-              refY="3.5"
-              orient="auto"
-            >
-              <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
-            </marker>
-          </defs>
-          
-          {workflow.transitions.map(transition => {
-            const sourceTask = workflow.tasks.find(t => t.id === transition.sourceTaskId);
-            const targetTask = workflow.tasks.find(t => t.id === transition.targetTaskId);
-            
-            if (!sourceTask || !targetTask) return null;
-            
-            const startX = sourceTask.position.x + 100;
-            const startY = sourceTask.position.y + 30;
-            const endX = targetTask.position.x;
-            const endY = targetTask.position.y + 30;
-            
-            // Create a curved path for nicer visualization
-            const dx = endX - startX;
-            const dy = endY - startY;
-            const controlX = startX + dx / 2;
-            const controlY = startY + dy / 2;
-            const pathData = `M ${startX} ${startY} Q ${controlX} ${controlY}, ${endX} ${endY}`;
-            
-            return (
-              <g key={transition.id} 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSelectTransition(transition.id);
-                }}
-                style={{ pointerEvents: 'all', cursor: 'pointer' }}
+
+  // Edit a transition's properties
+  const handleEditTransition = () => {
+    if (selectedTransitionId) {
+      const transition = workflow.transitions.find(
+        (t) => t.id === selectedTransitionId
+      );
+      if (transition) {
+        setTransitionBeingEdited({ ...transition });
+      }
+    }
+  };
+
+  // Save task changes
+  const handleSaveTaskChanges = () => {
+    if (taskBeingEdited) {
+      setWorkflow((prev) => ({
+        ...prev,
+        tasks: prev.tasks.map((task) =>
+          task.id === taskBeingEdited.id ? taskBeingEdited : task
+        ),
+        updatedAt: new Date().toISOString(),
+      }));
+      
+      setTaskBeingEdited(null);
+      setIsDirty(true);
+      
+      toast({
+        title: "Task Updated",
+        description: "Task properties saved successfully",
+      });
+    }
+  };
+
+  // Save transition changes
+  const handleSaveTransitionChanges = () => {
+    if (transitionBeingEdited) {
+      setWorkflow((prev) => ({
+        ...prev,
+        transitions: prev.transitions.map((transition) =>
+          transition.id === transitionBeingEdited.id
+            ? transitionBeingEdited
+            : transition
+        ),
+        updatedAt: new Date().toISOString(),
+      }));
+      
+      setTransitionBeingEdited(null);
+      setIsDirty(true);
+      
+      toast({
+        title: "Transition Updated",
+        description: "Transition properties saved successfully",
+      });
+    }
+  };
+
+  // Update task being edited
+  const updateTaskBeingEdited = (field: string, value: any) => {
+    if (taskBeingEdited) {
+      if (field === "actionType" && taskBeingEdited.type === "Action") {
+        // When action type changes, update parameters with defaults
+        setTaskBeingEdited({
+          ...taskBeingEdited,
+          actionType: value as ActionType,
+          parameters: ACTION_TYPE_PARAMS[value as ActionType],
+        });
+      } else if (field.startsWith("parameters.") && taskBeingEdited.parameters) {
+        // Handle nested parameters
+        const paramName = field.split(".")[1];
+        setTaskBeingEdited({
+          ...taskBeingEdited,
+          parameters: {
+            ...taskBeingEdited.parameters,
+            [paramName]: value,
+          },
+        });
+      } else {
+        // Handle regular fields
+        setTaskBeingEdited({
+          ...taskBeingEdited,
+          [field]: value,
+        });
+      }
+    }
+  };
+
+  // Create a new workflow
+  const handleNewWorkflow = () => {
+    if (isDirty) {
+      setShowSaveDialog(true);
+    } else {
+      setWorkflow({
+        ...DEFAULT_WORKFLOW,
+        id: uuidv4(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      
+      setSelectedTaskId(null);
+      setSelectedTransitionId(null);
+      
+      toast({
+        title: "New Workflow",
+        description: "Created a new workflow",
+      });
+    }
+  };
+
+  // Create a duplicate of the current workflow
+  const handleDuplicateWorkflow = () => {
+    const newWorkflow = {
+      ...workflow,
+      id: uuidv4(),
+      name: `${workflow.name} (Copy)`,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    
+    setWorkflow(newWorkflow);
+    setIsDirty(true);
+    
+    toast({
+      title: "Workflow Duplicated",
+      description: "Created a copy of the current workflow",
+    });
+  };
+
+  // Render editor sidebar based on selection
+  const renderEditorSidebar = () => {
+    if (selectedTaskId) {
+      const task = getTaskById(selectedTaskId);
+      if (!task) return null;
+      
+      return (
+        <div className="p-4 border-l border-border h-full overflow-y-auto">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium">Task Properties</h3>
+            <div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleEditTask}
+                className="mr-2"
               >
-                <path
-                  d={pathData}
-                  fill="none"
-                  stroke={selectedTransition?.id === transition.id ? "#0284c7" : "#94a3b8"}
-                  strokeWidth="2"
-                  markerEnd="url(#arrowhead)"
-                />
-                
-                {/* Invisible wider path for easier clicking */}
-                <path
-                  d={pathData}
-                  fill="none"
-                  stroke="transparent"
-                  strokeWidth="10"
-                  style={{ pointerEvents: 'all', cursor: 'pointer' }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleSelectTransition(transition.id);
-                  }}
-                />
-                
-                {/* Display transition condition if it exists */}
-                {transition.condition && (
-                  <foreignObject
-                    x={controlX - 80}
-                    y={controlY - 20}
-                    width="160"
-                    height="40"
-                  >
-                    <div className="bg-white border border-slate-200 rounded-md px-2 py-1 text-xs text-center text-slate-700">
-                      {transition.condition}
-                    </div>
-                  </foreignObject>
-                )}
-              </g>
-            );
-          })}
-          
-          {/* Draw the in-progress transition during creation */}
-          {isAddingTransition && transitionSource && (
-            (() => {
-              const sourceTask = workflow.tasks.find(t => t.id === transitionSource);
-              if (!sourceTask) return null;
-              
-              const startX = sourceTask.position.x + 100;
-              const startY = sourceTask.position.y + 30;
-              
-              // Follow mouse position for the end point
-              const [mousePos, setMousePos] = useState({ x: startX + 100, y: startY });
-              
-              useEffect(() => {
-                const handleMouseMove = (e: MouseEvent) => {
-                  if (!canvasRef.current) return;
-                  
-                  const canvasRect = canvasRef.current.getBoundingClientRect();
-                  setMousePos({
-                    x: e.clientX - canvasRect.left,
-                    y: e.clientY - canvasRect.top
-                  });
-                };
-                
-                window.addEventListener('mousemove', handleMouseMove);
-                return () => window.removeEventListener('mousemove', handleMouseMove);
-              }, []);
-              
-              // Create a curved path
-              const dx = mousePos.x - startX;
-              const dy = mousePos.y - startY;
-              const controlX = startX + dx / 2;
-              const controlY = startY + dy / 2;
-              const pathData = `M ${startX} ${startY} Q ${controlX} ${controlY}, ${mousePos.x} ${mousePos.y}`;
-              
-              return (
-                <path
-                  d={pathData}
-                  fill="none"
-                  stroke="#0284c7"
-                  strokeWidth="2"
-                  strokeDasharray="5,5"
-                  markerEnd="url(#arrowhead)"
-                />
-              );
-            })()
-          )}
-        </svg>
-        
-        {/* Render tasks */}
-        {workflow.tasks.map(task => (
-          <div
-            key={task.id}
-            className={`absolute p-4 rounded-lg shadow-md cursor-grab active:cursor-grabbing ${
-              selectedTask?.id === task.id ? 'ring-2 ring-primary' : ''
-            } ${
-              task.type === 'Action' ? 'bg-blue-100 border-blue-300' :
-              task.type === 'Condition' ? 'bg-yellow-100 border-yellow-300' :
-              task.type === 'Trigger' ? 'bg-green-100 border-green-300' : 'bg-purple-100 border-purple-300'
-            } border-2`}
-            style={{
-              left: `${task.position.x}px`,
-              top: `${task.position.y}px`,
-              width: '200px',
-              transition: isDragging && selectedTask?.id === task.id ? 'none' : 'box-shadow 0.2s ease'
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              handleSelectTask(task.id);
-            }}
-            onMouseDown={(e) => {
-              if (!isAddingTransition) {
-                handleTaskMouseDown(e, task.id);
-              }
-            }}
-          >
-            <div className="flex items-center mb-2">
-              <GripVertical className="h-4 w-4 mr-2 text-gray-400" />
-              <div className="font-medium truncate flex-grow">{task.name}</div>
-              
-              {/* Connection point for creating transitions */}
-              <button 
-                className="ml-2 p-1 rounded-full hover:bg-blue-200"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleStartTransition(task.id);
-                }}
-                title="Create connection"
+                <Settings className="h-4 w-4 mr-1" />
+                Edit
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDeleteTask}
+                className="text-destructive"
               >
-                <Link2Icon className="h-4 w-4 text-blue-600" />
-              </button>
-            </div>
-            <div className="text-xs text-gray-500 font-medium">{task.type}</div>
-            {task.actionType && (
-              <div className="text-xs text-gray-500">{task.actionType}</div>
-            )}
-            {task.conditionLogic && (
-              <div className="text-xs text-gray-600 mt-1 bg-white p-1 rounded border border-yellow-200">
-                <code>{task.conditionLogic}</code>
-              </div>
-            )}
-            {task.retryPolicy && (
-              <div className="text-xs text-gray-500 mt-1">
-                Retries: {task.retryPolicy.attempts}
-              </div>
-            )}
-          </div>
-        ))}
-        
-        {/* Add a helper message when the canvas is empty */}
-        {workflow.tasks.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center text-gray-400">
-            <div className="text-center">
-              <Settings2Icon className="mx-auto h-10 w-10 mb-2" />
-              <p>Start by adding a task from the panel on the right</p>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="mt-4"
-                onClick={() => setShowWorkflowTemplates(true)}
-              >
-                Or use a template
+                <Trash2 className="h-4 w-4 mr-1" />
+                Delete
               </Button>
             </div>
           </div>
-        )}
+          
+          <div className="space-y-4">
+            <div>
+              <Label className="font-medium">ID</Label>
+              <Input value={task.id} readOnly className="mt-1 bg-muted" />
+            </div>
+            
+            <div>
+              <Label className="font-medium">Name</Label>
+              <Input value={task.name} readOnly className="mt-1 bg-muted" />
+            </div>
+            
+            <div>
+              <Label className="font-medium">Type</Label>
+              <Input value={task.type} readOnly className="mt-1 bg-muted" />
+            </div>
+            
+            {task.type === "Action" && (
+              <div>
+                <Label className="font-medium">Action Type</Label>
+                <Input
+                  value={task.actionType}
+                  readOnly
+                  className="mt-1 bg-muted"
+                />
+              </div>
+            )}
+            
+            {task.type === "Condition" && task.conditionLogic && (
+              <div>
+                <Label className="font-medium">Condition Logic</Label>
+                <Textarea
+                  value={task.conditionLogic}
+                  readOnly
+                  className="mt-1 bg-muted"
+                />
+              </div>
+            )}
+            
+            <div className="pt-2">
+              <h4 className="text-sm font-medium mb-2">Parameters</h4>
+              <pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
+                {JSON.stringify(task.parameters, null, 2)}
+              </pre>
+            </div>
+            
+            <div className="pt-3">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => handleStartConnecting(task.id)}
+              >
+                <ArrowRight className="h-4 w-4 mr-1" />
+                Connect to Another Task
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    
+    if (selectedTransitionId) {
+      const transition = workflow.transitions.find(
+        (t) => t.id === selectedTransitionId
+      );
+      if (!transition) return null;
+      
+      const sourceTask = getTaskById(transition.sourceTaskId);
+      const targetTask = getTaskById(transition.targetTaskId);
+      
+      return (
+        <div className="p-4 border-l border-border h-full overflow-y-auto">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium">Transition Properties</h3>
+            <div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleEditTransition}
+                className="mr-2"
+              >
+                <Settings className="h-4 w-4 mr-1" />
+                Edit
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDeleteTransition}
+                className="text-destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                Delete
+              </Button>
+            </div>
+          </div>
+          
+          <div className="space-y-4">
+            <div>
+              <Label className="font-medium">ID</Label>
+              <Input
+                value={transition.id}
+                readOnly
+                className="mt-1 bg-muted"
+              />
+            </div>
+            
+            <div>
+              <Label className="font-medium">Source Task</Label>
+              <Input
+                value={sourceTask ? sourceTask.name : "Unknown"}
+                readOnly
+                className="mt-1 bg-muted"
+              />
+            </div>
+            
+            <div>
+              <Label className="font-medium">Target Task</Label>
+              <Input
+                value={targetTask ? targetTask.name : "Unknown"}
+                readOnly
+                className="mt-1 bg-muted"
+              />
+            </div>
+            
+            <div>
+              <Label className="font-medium">Condition</Label>
+              <Textarea
+                value={transition.condition || "No condition (always execute)"}
+                readOnly
+                className="mt-1 bg-muted"
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+    
+    return (
+      <div className="p-4 border-l border-border h-full overflow-y-auto">
+        <h3 className="text-lg font-medium mb-4">Workflow Designer</h3>
+        
+        <p className="text-muted-foreground mb-4">
+          Select a task or transition to view and edit its properties.
+        </p>
+        
+        <div className="space-y-2 mb-6">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-start"
+            onClick={() => handleAddTask("Trigger")}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Trigger
+          </Button>
+          
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-start"
+            onClick={() => handleAddTask("Action")}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Action
+          </Button>
+          
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-start"
+            onClick={() => handleAddTask("Condition")}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Condition
+          </Button>
+          
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full justify-start"
+            onClick={() => handleAddTask("SubWorkflow")}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Sub-Workflow
+          </Button>
+        </div>
+        
+        <Separator className="my-4" />
+        
+        <div className="space-y-4 mb-6">
+          <h4 className="text-sm font-medium">Workflow Properties</h4>
+          
+          <div>
+            <Label>Name</Label>
+            <Input
+              value={workflow.name}
+              onChange={(e) =>
+                setWorkflow((prev) => ({
+                  ...prev,
+                  name: e.target.value,
+                  updatedAt: new Date().toISOString(),
+                }))
+              }
+              className="mt-1"
+            />
+          </div>
+          
+          <div>
+            <Label>Description</Label>
+            <Textarea
+              value={workflow.description}
+              onChange={(e) =>
+                setWorkflow((prev) => ({
+                  ...prev,
+                  description: e.target.value,
+                  updatedAt: new Date().toISOString(),
+                }))
+              }
+              className="mt-1"
+            />
+          </div>
+        </div>
       </div>
     );
   };
-  
-  // Enhanced properties panel with more task type options
-  const renderPropertiesPanel = () => {
-    // Task properties panel
-    if (selectedTask) {
-      return (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="space-y-4">
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* Toolbar */}
+      <div className="bg-card p-2 border-b flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <Button variant="outline" size="sm" onClick={handleNewWorkflow}>
+            <FileDown className="h-4 w-4 mr-1" />
+            New
+          </Button>
+          
+          <Button
+            variant={isDirty ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowSaveDialog(true)}
+          >
+            <Save className="h-4 w-4 mr-1" />
+            Save
+          </Button>
+          
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDuplicateWorkflow}
+          >
+            <Copy className="h-4 w-4 mr-1" />
+            Duplicate
+          </Button>
+          
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm">
+              <Plus className="h-4 w-4 mr-1" />
+              Template
+            </Button>
+          </DialogTrigger>
+        </div>
+        
+        <div className="flex items-center space-x-2">
+          <Button variant="outline" size="sm" onClick={handleExportWorkflow}>
+            <FileDown className="h-4 w-4 mr-1" />
+            Export
+          </Button>
+          
+          <div className="relative">
+            <Input
+              type="file"
+              id="import-workflow"
+              accept=".json"
+              className="sr-only"
+              onChange={handleImportWorkflow}
+            />
+            <Label
+              htmlFor="import-workflow"
+              className="cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background border border-input hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2"
+            >
+              <FileUp className="h-4 w-4 mr-1" />
+              Import
+            </Label>
+          </div>
+          
+          <Button variant="outline" size="sm" onClick={validateWorkflow}>
+            <CheckCircle className="h-4 w-4 mr-1" />
+            Validate
+          </Button>
+          
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleRunWorkflow}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <>
+                <div className="animate-spin mr-1">
+                  <ArrowRight className="h-4 w-4" />
+                </div>
+                Running...
+              </>
+            ) : (
+              <>
+                <Play className="h-4 w-4 mr-1" />
+                Run
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+      
+      {/* Main Editor */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1">
+        <TabsList className="border-b rounded-none p-0 px-2">
+          <TabsTrigger
+            value="editor"
+            className="rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary"
+          >
+            Editor
+          </TabsTrigger>
+          <TabsTrigger
+            value="saved"
+            className="rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary"
+          >
+            Saved Workflows
+          </TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="editor" className="flex-1 flex p-0 m-0 border-0">
+          <div
+            ref={canvasRef}
+            className="flex-1 relative bg-slate-50 overflow-auto min-h-[500px]"
+            onClick={handleCanvasClick}
+            onMouseMove={handleCanvasMouseMove}
+          >
+            {/* Tasks */}
+            {workflow.tasks.map((task) => (
+              <TaskNode
+                key={task.id}
+                task={task}
+                selected={selectedTaskId === task.id}
+                onSelect={handleTaskSelect}
+                onMove={handleTaskMove}
+              />
+            ))}
+            
+            {/* Connections SVG Layer */}
+            <svg className="absolute top-0 left-0 w-full h-full pointer-events-none">
+              {workflow.transitions.map((transition) => {
+                const sourceTask = getTaskById(transition.sourceTaskId);
+                const targetTask = getTaskById(transition.targetTaskId);
+                
+                if (!sourceTask || !targetTask) return null;
+                
+                return (
+                  <TransitionLine
+                    key={transition.id}
+                    sourceTask={sourceTask}
+                    targetTask={targetTask}
+                    condition={transition.condition}
+                    selected={selectedTransitionId === transition.id}
+                  />
+                );
+              })}
+              
+              {/* Connection in progress */}
+              {connectionInProgress && (
+                <g>
+                  <path
+                    d={`M ${
+                      getTaskById(connectionInProgress.sourceId)?.position.x || 0
+                    } ${
+                      getTaskById(connectionInProgress.sourceId)?.position.y || 0
+                    } L ${connectionInProgress.targetPos.x} ${
+                      connectionInProgress.targetPos.y
+                    }`}
+                    stroke="#94a3b8"
+                    strokeWidth="1.5"
+                    strokeDasharray="5,5"
+                    fill="none"
+                  />
+                </g>
+              )}
+            </svg>
+          </div>
+          
+          {/* Editor Sidebar */}
+          <div className="w-80">{renderEditorSidebar()}</div>
+        </TabsContent>
+        
+        <TabsContent
+          value="saved"
+          className="p-4 data-[state=active]:flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+        >
+          {savedWorkflows.length === 0 ? (
+            <div className="col-span-3 text-center p-8">
+              <h3 className="text-lg font-medium mb-2">No Saved Workflows</h3>
+              <p className="text-muted-foreground mb-4">
+                You haven't saved any workflows yet. Create and save a workflow to see it here.
+              </p>
+              <Button onClick={handleNewWorkflow}>Create New Workflow</Button>
+            </div>
+          ) : (
+            <>
+              {savedWorkflows.map((savedWorkflow) => (
+                <Card key={savedWorkflow.id} className="overflow-hidden">
+                  <CardHeader className="pb-2">
+                    <CardTitle>{savedWorkflow.name}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pb-2">
+                    <p className="text-sm text-muted-foreground mb-2">
+                      {savedWorkflow.description}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Tasks: {savedWorkflow.tasks.length} | Transitions:{" "}
+                      {savedWorkflow.transitions.length}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Last updated:{" "}
+                      {new Date(savedWorkflow.updatedAt).toLocaleDateString()}
+                    </p>
+                  </CardContent>
+                  <CardFooter>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => handleLoadWorkflow(savedWorkflow)}
+                    >
+                      Load Workflow
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))}
+            </>
+          )}
+        </TabsContent>
+      </Tabs>
+      
+      {/* Task Edit Dialog */}
+      <Dialog open={taskBeingEdited !== null} onOpenChange={(open) => !open && setTaskBeingEdited(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Task</DialogTitle>
+            <DialogDescription>
+              Modify the properties of the selected task
+            </DialogDescription>
+          </DialogHeader>
+          
+          {taskBeingEdited && (
+            <div className="py-2 space-y-4">
               <div>
-                <Label htmlFor="taskName">Task Name</Label>
+                <Label htmlFor="task-name">Task Name</Label>
                 <Input
-                  id="taskName"
-                  value={selectedTask.name}
-                  onChange={(e) => handleUpdateTask({
-                    ...selectedTask,
-                    name: e.target.value
-                  })}
+                  id="task-name"
+                  value={taskBeingEdited.name}
+                  onChange={(e) =>
+                    updateTaskBeingEdited("name", e.target.value)
+                  }
                 />
               </div>
               
               <div>
-                <Label>Task Type</Label>
-                <div className="text-sm font-medium">{selectedTask.type}</div>
+                <Label htmlFor="task-type">Task Type</Label>
+                <Select
+                  value={taskBeingEdited.type}
+                  onValueChange={(value) =>
+                    updateTaskBeingEdited("type", value)
+                  }
+                  disabled
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Trigger">Trigger</SelectItem>
+                    <SelectItem value="Action">Action</SelectItem>
+                    <SelectItem value="Condition">Condition</SelectItem>
+                    <SelectItem value="SubWorkflow">SubWorkflow</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               
-              {selectedTask.type === 'Action' && (
+              {/* Action-specific UI */}
+              {taskBeingEdited.type === "Action" && (
                 <div>
-                  <Label htmlFor="actionType">Action Type</Label>
+                  <Label htmlFor="action-type">Action Type</Label>
                   <Select
-                    value={selectedTask.actionType || 'HttpRequest'}
-                    onValueChange={(value) => handleUpdateTask({
-                      ...selectedTask,
-                      actionType: value as ActionType
-                    })}
+                    value={taskBeingEdited.actionType || "HttpRequest"}
+                    onValueChange={(value) =>
+                      updateTaskBeingEdited("actionType", value)
+                    }
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select an action type" />
+                      <SelectValue placeholder="Select action type" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="HttpRequest">HTTP Request</SelectItem>
-                      <SelectItem value="DatabaseOperation">Database Operation</SelectItem>
+                      <SelectItem value="DatabaseOperation">
+                        Database Operation
+                      </SelectItem>
                       <SelectItem value="MessageQueue">Message Queue</SelectItem>
-                      <SelectItem value="ScriptExecution">Script Execution</SelectItem>
-                      <SelectItem value="DummyAction">Dummy Action</SelectItem>
+                      <SelectItem value="ScriptExecution">
+                        Script Execution
+                      </SelectItem>
+                      <SelectItem value="DummyAction">
+                        Dummy Action (Testing)
+                      </SelectItem>
                     </SelectContent>
                   </Select>
-                  
-                  {/* Action-specific parameters */}
-                  {selectedTask.actionType === 'HttpRequest' && (
-                    <div className="mt-4 space-y-2">
-                      <Label htmlFor="requestUrl">URL</Label>
+                </div>
+              )}
+              
+              {/* Condition-specific UI */}
+              {taskBeingEdited.type === "Condition" && (
+                <div>
+                  <Label htmlFor="condition-logic">Condition Logic</Label>
+                  <Textarea
+                    id="condition-logic"
+                    value={taskBeingEdited.conditionLogic || ""}
+                    onChange={(e) =>
+                      updateTaskBeingEdited("conditionLogic", e.target.value)
+                    }
+                    placeholder="JavaScript expression, e.g., data.value > 10"
+                  />
+                </div>
+              )}
+              
+              {/* HTTP Request parameters */}
+              {taskBeingEdited.type === "Action" &&
+                taskBeingEdited.actionType === "HttpRequest" && (
+                  <>
+                    <div>
+                      <Label htmlFor="http-url">URL</Label>
                       <Input
-                        id="requestUrl"
+                        id="http-url"
+                        value={taskBeingEdited.parameters.url || ""}
+                        onChange={(e) =>
+                          updateTaskBeingEdited("parameters.url", e.target.value)
+                        }
                         placeholder="https://api.example.com/endpoint"
-                        value={(selectedTask.parameters as any)?.url || ''}
-                        onChange={(e) => handleUpdateTask({
-                          ...selectedTask,
-                          parameters: { 
-                            ...selectedTask.parameters,
-                            url: e.target.value 
-                          }
-                        })}
                       />
-                      
-                      <Label htmlFor="requestMethod">Method</Label>
+                    </div>
+                    
+                    <div>
+                      <Label htmlFor="http-method">Method</Label>
                       <Select
-                        value={(selectedTask.parameters as any)?.method || 'GET'}
-                        onValueChange={(value) => handleUpdateTask({
-                          ...selectedTask,
-                          parameters: { 
-                            ...selectedTask.parameters,
-                            method: value 
-                          }
-                        })}
+                        value={taskBeingEdited.parameters.method || "GET"}
+                        onValueChange={(value) =>
+                          updateTaskBeingEdited("parameters.method", value)
+                        }
                       >
                         <SelectTrigger>
-                          <SelectValue placeholder="Select HTTP method" />
+                          <SelectValue placeholder="Select method" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="GET">GET</SelectItem>
@@ -1007,663 +1639,245 @@ const WorkflowDesigner = () => {
                           <SelectItem value="PATCH">PATCH</SelectItem>
                         </SelectContent>
                       </Select>
-                      
-                      <Label htmlFor="requestBody">Request Body (JSON)</Label>
-                      <Textarea
-                        id="requestBody"
-                        placeholder='{"key": "value"}'
-                        value={(selectedTask.parameters as any)?.body || ''}
-                        onChange={(e) => handleUpdateTask({
-                          ...selectedTask,
-                          parameters: { 
-                            ...selectedTask.parameters,
-                            body: e.target.value 
-                          }
-                        })}
-                      />
                     </div>
-                  )}
-                  
-                  {selectedTask.actionType === 'DatabaseOperation' && (
-                    <div className="mt-4 space-y-2">
-                      <Label htmlFor="operation">Operation</Label>
-                      <Select
-                        value={(selectedTask.parameters as any)?.operation || 'SELECT'}
-                        onValueChange={(value) => handleUpdateTask({
-                          ...selectedTask,
-                          parameters: { 
-                            ...selectedTask.parameters,
-                            operation: value 
-                          }
-                        })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select operation" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="SELECT">SELECT</SelectItem>
-                          <SelectItem value="INSERT">INSERT</SelectItem>
-                          <SelectItem value="UPDATE">UPDATE</SelectItem>
-                          <SelectItem value="DELETE">DELETE</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      
-                      <Label htmlFor="table">Table Name</Label>
-                      <Input
-                        id="table"
-                        placeholder="users"
-                        value={(selectedTask.parameters as any)?.table || ''}
-                        onChange={(e) => handleUpdateTask({
-                          ...selectedTask,
-                          parameters: { 
-                            ...selectedTask.parameters,
-                            table: e.target.value 
-                          }
-                        })}
-                      />
-                      
-                      <Label htmlFor="query">SQL Query/Data</Label>
-                      <Textarea
-                        id="query"
-                        placeholder="SELECT * FROM users WHERE id = :id"
-                        value={(selectedTask.parameters as any)?.query || ''}
-                        onChange={(e) => handleUpdateTask({
-                          ...selectedTask,
-                          parameters: { 
-                            ...selectedTask.parameters,
-                            query: e.target.value 
-                          }
-                        })}
-                      />
-                    </div>
-                  )}
-                  
-                  {selectedTask.actionType === 'ScriptExecution' && (
-                    <div className="mt-4 space-y-2">
-                      <Label htmlFor="scriptType">Script Type</Label>
-                      <Select
-                        value={(selectedTask.parameters as any)?.scriptType || 'javascript'}
-                        onValueChange={(value) => handleUpdateTask({
-                          ...selectedTask,
-                          parameters: { 
-                            ...selectedTask.parameters,
-                            scriptType: value 
-                          }
-                        })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select script type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="javascript">JavaScript</SelectItem>
-                          <SelectItem value="python">Python</SelectItem>
-                          <SelectItem value="shell">Shell</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      
-                      <Label htmlFor="script">Script Content</Label>
-                      <Textarea
-                        id="script"
-                        placeholder="// Enter your script here"
-                        className="h-32 font-mono text-sm"
-                        value={(selectedTask.parameters as any)?.script || ''}
-                        onChange={(e) => handleUpdateTask({
-                          ...selectedTask,
-                          parameters: { 
-                            ...selectedTask.parameters,
-                            script: e.target.value 
-                          }
-                        })}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
+                  </>
+                )}
               
-              {selectedTask.type === 'Condition' && (
+              {/* Script Execution parameters */}
+              {taskBeingEdited.type === "Action" &&
+                taskBeingEdited.actionType === "ScriptExecution" && (
+                  <div>
+                    <Label htmlFor="script-content">Script Content</Label>
+                    <Textarea
+                      id="script-content"
+                      value={taskBeingEdited.parameters.script || ""}
+                      onChange={(e) =>
+                        updateTaskBeingEdited(
+                          "parameters.script",
+                          e.target.value
+                        )
+                      }
+                      className="font-mono"
+                      placeholder="console.log('Hello, World!');"
+                    />
+                  </div>
+                )}
+              
+              {/* Trigger parameters */}
+              {taskBeingEdited.type === "Trigger" && (
                 <div>
-                  <Label htmlFor="conditionLogic">Condition Logic</Label>
-                  <Textarea
-                    id="conditionLogic"
-                    value={selectedTask.conditionLogic || ''}
-                    onChange={(e) => handleUpdateTask({
-                      ...selectedTask,
-                      conditionLogic: e.target.value
-                    })}
-                    placeholder="e.g. data.status === 'success'"
-                    className="font-mono text-sm"
+                  <Label htmlFor="schedule">Schedule (Cron Expression)</Label>
+                  <Input
+                    id="schedule"
+                    value={taskBeingEdited.parameters.schedule || ""}
+                    onChange={(e) =>
+                      updateTaskBeingEdited(
+                        "parameters.schedule",
+                        e.target.value
+                      )
+                    }
+                    placeholder="0 0 * * *"
                   />
-                  
-                  <p className="text-xs text-gray-500 mt-1">
-                    Use JavaScript expressions to define conditions. The workflow data is available as 'data'.
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Format: minute hour day-of-month month day-of-week
                   </p>
                 </div>
               )}
-              
-              {selectedTask.type === 'Trigger' && (
-                <div>
-                  <Label htmlFor="triggerType">Trigger Type</Label>
-                  <Select
-                    value={(selectedTask.parameters as any)?.triggerType || 'webhook'}
-                    onValueChange={(value) => handleUpdateTask({
-                      ...selectedTask,
-                      parameters: { 
-                        ...selectedTask.parameters,
-                        triggerType: value 
-                      }
-                    })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select trigger type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="webhook">Webhook</SelectItem>
-                      <SelectItem value="schedule">Schedule</SelectItem>
-                      <SelectItem value="event">Event</SelectItem>
-                      <SelectItem value="manual">Manual</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  
-                  {(selectedTask.parameters as any)?.triggerType === 'schedule' && (
-                    <div className="mt-2">
-                      <Label htmlFor="schedule">Cron Schedule</Label>
-                      <Input
-                        id="schedule"
-                        placeholder="0 0 * * *"
-                        value={(selectedTask.parameters as any)?.schedule || ''}
-                        onChange={(e) => handleUpdateTask({
-                          ...selectedTask,
-                          parameters: { 
-                            ...selectedTask.parameters,
-                            schedule: e.target.value 
-                          }
-                        })}
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Use cron syntax (e.g., "0 0 * * *" for daily at midnight)
-                      </p>
-                    </div>
-                  )}
-                  
-                  {(selectedTask.parameters as any)?.triggerType === 'webhook' && (
-                    <div className="mt-2">
-                      <Label htmlFor="webhookPath">Webhook Path</Label>
-                      <Input
-                        id="webhookPath"
-                        placeholder="/hooks/my-workflow"
-                        value={(selectedTask.parameters as any)?.webhookPath || ''}
-                        onChange={(e) => handleUpdateTask({
-                          ...selectedTask,
-                          parameters: { 
-                            ...selectedTask.parameters,
-                            webhookPath: e.target.value 
-                          }
-                        })}
-                      />
-                    </div>
-                  )}
-                  
-                  {(selectedTask.parameters as any)?.triggerType === 'event' && (
-                    <div className="mt-2">
-                      <Label htmlFor="eventName">Event Name</Label>
-                      <Input
-                        id="eventName"
-                        placeholder="user.created"
-                        value={(selectedTask.parameters as any)?.eventName || ''}
-                        onChange={(e) => handleUpdateTask({
-                          ...selectedTask,
-                          parameters: { 
-                            ...selectedTask.parameters,
-                            eventName: e.target.value 
-                          }
-                        })}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              {/* Advanced settings section */}
-              <div className="mt-4 border-t pt-4">
-                <h4 className="text-sm font-medium mb-2">Advanced Settings</h4>
-                
-                <div className="space-y-3">
-                  <div>
-                    <Label htmlFor="timeout">Timeout (ms)</Label>
-                    <Input
-                      id="timeout"
-                      type="number"
-                      placeholder="30000"
-                      value={selectedTask.timeout || ''}
-                      onChange={(e) => handleUpdateTask({
-                        ...selectedTask,
-                        timeout: e.target.value ? parseInt(e.target.value) : undefined
-                      })}
-                    />
-                  </div>
-                  
-                  <div>
-                    <Label>Retry Policy</Label>
-                    <div className="grid grid-cols-2 gap-2 mt-1">
-                      <div>
-                        <Label htmlFor="retryAttempts" className="text-xs">Attempts</Label>
-                        <Input
-                          id="retryAttempts"
-                          type="number"
-                          placeholder="3"
-                          value={selectedTask.retryPolicy?.attempts || ''}
-                          onChange={(e) => handleUpdateTask({
-                            ...selectedTask,
-                            retryPolicy: {
-                              ...selectedTask.retryPolicy || { backoffStrategy: 'fixed', initialInterval: 1000 },
-                              attempts: e.target.value ? parseInt(e.target.value) : 0
-                            }
-                          })}
-                        />
-                      </div>
-                      
-                      <div>
-                        <Label htmlFor="retryInterval" className="text-xs">Interval (ms)</Label>
-                        <Input
-                          id="retryInterval"
-                          type="number"
-                          placeholder="1000"
-                          value={selectedTask.retryPolicy?.initialInterval || ''}
-                          onChange={(e) => handleUpdateTask({
-                            ...selectedTask,
-                            retryPolicy: {
-                              ...selectedTask.retryPolicy || { backoffStrategy: 'fixed', attempts: 3 },
-                              initialInterval: e.target.value ? parseInt(e.target.value) : 1000
-                            }
-                          })}
-                        />
-                      </div>
-                    </div>
-                    
-                    <div className="mt-2">
-                      <Label htmlFor="backoffStrategy" className="text-xs">Backoff Strategy</Label>
-                      <Select
-                        value={selectedTask.retryPolicy?.backoffStrategy || 'fixed'}
-                        onValueChange={(value) => handleUpdateTask({
-                          ...selectedTask,
-                          retryPolicy: {
-                            ...selectedTask.retryPolicy || { attempts: 3, initialInterval: 1000 },
-                            backoffStrategy: value as 'fixed' | 'exponential' | 'linear'
-                          }
-                        })}
-                      >
-                        <SelectTrigger className="h-8 text-xs">
-                          <SelectValue placeholder="Select strategy" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="fixed">Fixed</SelectItem>
-                          <SelectItem value="exponential">Exponential</SelectItem>
-                          <SelectItem value="linear">Linear</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => handleDeleteTask(selectedTask.id)}
-                className="mt-4"
-              >
-                <TrashIcon className="h-4 w-4 mr-2" />
-                Delete Task
-              </Button>
             </div>
-          </CardContent>
-        </Card>
-      );
-    }
-    
-    // Transition properties panel
-    if (selectedTransition) {
-      const sourceTask = workflow.tasks.find(t => t.id === selectedTransition.sourceTaskId);
-      const targetTask = workflow.tasks.find(t => t.id === selectedTransition.targetTaskId);
+          )}
+          
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setTaskBeingEdited(null)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveTaskChanges}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       
-      return (
-        <Card>
-          <CardContent className="pt-6">
-            <div className="space-y-4">
+      {/* Transition Edit Dialog */}
+      <Dialog
+        open={transitionBeingEdited !== null}
+        onOpenChange={(open) => !open && setTransitionBeingEdited(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Transition</DialogTitle>
+            <DialogDescription>
+              Modify the properties of the selected transition
+            </DialogDescription>
+          </DialogHeader>
+          
+          {transitionBeingEdited && (
+            <div className="py-2 space-y-4">
               <div>
-                <Label>Source Task</Label>
-                <div className="text-sm font-medium">
-                  {sourceTask?.name || 'Unknown'}
-                </div>
-              </div>
-              
-              <div>
-                <Label>Target Task</Label>
-                <div className="text-sm font-medium">
-                  {targetTask?.name || 'Unknown'}
-                </div>
-              </div>
-              
-              <div>
-                <Label htmlFor="transitionCondition">Condition (Optional)</Label>
+                <Label htmlFor="condition">Condition (Optional)</Label>
                 <Textarea
-                  id="transitionCondition"
-                  value={selectedTransition.condition || ''}
-                  onChange={(e) => handleUpdateTransition({
-                    ...selectedTransition,
-                    condition: e.target.value
-                  })}
-                  placeholder="Leave empty for unconditional transition"
-                  className="font-mono text-sm"
+                  id="condition"
+                  value={transitionBeingEdited.condition || ""}
+                  onChange={(e) =>
+                    setTransitionBeingEdited({
+                      ...transitionBeingEdited,
+                      condition: e.target.value,
+                    })
+                  }
+                  placeholder="JavaScript expression, e.g., data.status === 'success'"
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  Define an optional condition for this transition. If empty, the transition is always taken.
+                <p className="text-xs text-muted-foreground mt-1">
+                  Leave empty for unconditional execution
                 </p>
               </div>
-              
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={() => handleDeleteTransition(selectedTransition.id)}
-                className="mt-4"
-              >
-                <TrashIcon className="h-4 w-4 mr-2" />
-                Delete Connection
-              </Button>
             </div>
-          </CardContent>
-        </Card>
-      );
-    }
-    
-    // Default properties panel
-    return (
-      <Card>
-        <CardContent className="pt-6">
-          <div className="text-center py-6 text-gray-500">
-            <Settings2Icon className="mx-auto h-10 w-10 mb-2 text-gray-400" />
-            <p>Select a task or connection to edit its properties</p>
-            
-            {isAddingTransition && (
-              <div className="mt-4 p-2 bg-blue-50 rounded border border-blue-200 text-blue-700 text-sm">
-                <p className="font-medium">Creating connection</p>
-                <p className="text-xs mt-1">Click on another task to complete the connection or click anywhere to cancel.</p>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={handleCancelTransition}
-                  className="mt-2"
-                >
-                  Cancel
-                </Button>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  };
-  
-  // Render workflow templates dialog
-  const renderWorkflowTemplatesDialog = () => {
-    return (
-      <Dialog open={showWorkflowTemplates} onOpenChange={setShowWorkflowTemplates}>
-        <DialogContent className="sm:max-w-[600px]">
+          )}
+          
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setTransitionBeingEdited(null)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveTransitionChanges}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Template Gallery Dialog */}
+      <Dialog>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Workflow Templates</DialogTitle>
             <DialogDescription>
-              Choose a template to quickly start with a pre-defined workflow
+              Select a template to quickly create a workflow
             </DialogDescription>
           </DialogHeader>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
-            <Card 
-              className="cursor-pointer hover:border-primary transition-all"
-              onClick={() => handleLoadTemplate("data-sync")}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-center mb-2">
-                  <DatabaseIcon className="h-8 w-8 mr-2 text-blue-500" />
-                  <div>
-                    <h3 className="font-medium">Data Synchronization</h3>
-                    <p className="text-xs text-muted-foreground">
-                      Sync data between two systems
-                    </p>
-                  </div>
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  <p>4 tasks: Schedule Trigger → Fetch Source → Transform → Send to Target</p>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card 
-              className="cursor-pointer hover:border-primary transition-all"
-              onClick={() => handleLoadTemplate("approval-process")}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-center mb-2">
-                  <FileTextIcon className="h-8 w-8 mr-2 text-green-500" />
-                  <div>
-                    <h3 className="font-medium">Approval Process</h3>
-                    <p className="text-xs text-muted-foreground">
-                      Handle approval workflows with conditions
-                    </p>
-                  </div>
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  <p>4 tasks: Trigger → Condition → Manager Approval or Auto Approval</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowWorkflowTemplates(false)}>
-              Cancel
-            </Button>
-          </DialogFooter>
+          <ScrollArea className="h-[500px] pr-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+              {workflowTemplates.map((template) => (
+                <Card
+                  key={template.id}
+                  className="cursor-pointer hover:border-primary transition-all"
+                  onClick={() => handleApplyTemplate(template.id)}
+                >
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">{template.name}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm mb-2">{template.description}</p>
+                    <div className="flex items-center text-xs text-muted-foreground">
+                      <span className="bg-slate-100 px-2 py-1 rounded">
+                        {template.category}
+                      </span>
+                      <span className="ml-2">
+                        {template.workflow.tasks.length} tasks
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </ScrollArea>
         </DialogContent>
       </Dialog>
-    );
-  };
-  
-  // Render workflow preview and validation dialog
-  const renderPreviewDialog = () => {
-    return (
-      <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+      
+      {/* Validation Dialog */}
+      <Dialog
+        open={showValidationDialog}
+        onOpenChange={setShowValidationDialog}
+      >
+        <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center">
-              <AlertCircleIcon className="h-5 w-5 text-amber-500 mr-2" />
-              Workflow Validation
+              {validationErrors.length === 0 ? (
+                <>
+                  <CheckCircle className="mr-2 h-5 w-5 text-green-500" />
+                  Workflow Valid
+                </>
+              ) : (
+                <>
+                  <AlertTriangle className="mr-2 h-5 w-5 text-amber-500" />
+                  Validation Issues
+                </>
+              )}
             </DialogTitle>
-            <DialogDescription>
-              Please address the following issues before running the workflow
-            </DialogDescription>
           </DialogHeader>
           
-          <div className="py-4">
-            {validationErrors.length > 0 ? (
-              <div className="space-y-2">
+          {validationErrors.length === 0 ? (
+            <div className="py-4">
+              <p>Your workflow is valid and ready to run.</p>
+            </div>
+          ) : (
+            <div className="py-4">
+              <p className="mb-4">
+                Please fix the following issues before running your workflow:
+              </p>
+              <ul className="list-disc pl-5 space-y-1">
                 {validationErrors.map((error, index) => (
-                  <div key={index} className="flex items-start p-2 bg-red-50 border border-red-200 rounded text-sm">
-                    <AlertCircleIcon className="h-4 w-4 text-red-500 mr-2 mt-0.5 flex-shrink-0" />
-                    <span>{error}</span>
-                  </div>
+                  <li key={index} className="text-sm text-destructive">
+                    {error}
+                  </li>
                 ))}
-              </div>
-            ) : (
-              <div className="p-4 bg-green-50 border border-green-200 rounded text-sm flex items-center">
-                <CheckCircleIcon className="h-5 w-5 text-green-500 mr-2" />
-                Workflow is valid and ready to run
-              </div>
-            )}
-          </div>
+              </ul>
+            </div>
+          )}
           
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPreviewDialogOpen(false)}>
+            <Button onClick={() => setShowValidationDialog(false)}>
               Close
             </Button>
-            {validationErrors.length === 0 && (
-              <Button onClick={() => {
-                setPreviewDialogOpen(false);
-                runWorkflowMutation.mutate();
-              }}>
-                Run Workflow
-              </Button>
-            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    );
-  };
-  
-  // Loading state
-  if (isLoadingWorkflow) {
-    return (
-      <div className="container mx-auto px-4">
-        <div className="flex justify-center items-center h-64">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-4">Loading workflow...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  
-  // Main render
-  return (
-    <div className="container mx-auto px-4">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <Input
-              value={workflow.name}
-              onChange={(e) => setWorkflow(prev => ({
-                ...prev,
-                name: e.target.value
-              }))}
-              className="text-2xl font-bold bg-transparent border-transparent hover:border-gray-300 focus:border-primary w-auto min-w-[300px]"
-            />
-            <Badge variant="outline">{`v${workflow.version}`}</Badge>
-          </div>
-          <div className="flex mt-1 gap-4">
-            <Textarea
-              value={workflow.description}
-              onChange={(e) => setWorkflow(prev => ({
-                ...prev,
-                description: e.target.value
-              }))}
-              placeholder="Add a workflow description..."
-              className="h-8 text-sm text-gray-500 bg-transparent border-transparent hover:border-gray-300 focus:border-primary resize-none"
-            />
-          </div>
-        </div>
-        <div className="flex space-x-2">
-          <Button 
-            variant="outline" 
-            onClick={() => setPreviewDialogOpen(true)}
-            className="flex items-center"
-          >
-            <EyeIcon className="h-4 w-4 mr-2" />
-            Validate
-          </Button>
-          <Button 
-            onClick={handleSaveWorkflow} 
-            disabled={saveWorkflowMutation.isPending}
-            className="flex items-center"
-          >
-            <SaveIcon className="h-4 w-4 mr-2" />
-            Save{saveWorkflowMutation.isPending ? "ing..." : ""}
-          </Button>
-          <Button 
-            onClick={handleRunWorkflow} 
-            disabled={runWorkflowMutation.isPending} 
-            variant="secondary"
-            className="flex items-center"
-          >
-            <PlayIcon className="h-4 w-4 mr-2" />
-            Run
-          </Button>
-        </div>
-      </div>
       
-      <Tabs value={currentTab} onValueChange={setCurrentTab}>
-        <TabsList className="mb-4">
-          <TabsTrigger value="designer">Designer</TabsTrigger>
-          <TabsTrigger value="json">JSON</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="designer">
-          <div className="grid grid-cols-12 gap-6">
-            <div className="col-span-9">
-              {renderCanvas()}
+      {/* Save Dialog */}
+      <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save Workflow</DialogTitle>
+            <DialogDescription>
+              Enter a name and description for your workflow
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="workflow-name">Name</Label>
+              <Input
+                id="workflow-name"
+                value={workflow.name}
+                onChange={(e) =>
+                  setWorkflow((prev) => ({ ...prev, name: e.target.value }))
+                }
+              />
             </div>
             
-            <div className="col-span-3 space-y-6">
-              <Card>
-                <CardContent className="pt-6">
-                  <h3 className="font-medium mb-4">Add Task</h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      variant="outline"
-                      className="flex flex-col h-auto py-3"
-                      onClick={() => handleAddTask('Trigger')}
-                    >
-                      <PlusIcon className="h-5 w-5 mb-1 text-green-500" />
-                      <span>Trigger</span>
-                    </Button>
-                    
-                    <Button
-                      variant="outline"
-                      className="flex flex-col h-auto py-3"
-                      onClick={() => handleAddTask('Action')}
-                    >
-                      <PlusIcon className="h-5 w-5 mb-1 text-blue-500" />
-                      <span>Action</span>
-                    </Button>
-                    
-                    <Button
-                      variant="outline"
-                      className="flex flex-col h-auto py-3"
-                      onClick={() => handleAddTask('Condition')}
-                    >
-                      <PlusIcon className="h-5 w-5 mb-1 text-yellow-500" />
-                      <span>Condition</span>
-                    </Button>
-                    
-                    <Button
-                      variant="outline"
-                      className="flex flex-col h-auto py-3"
-                      onClick={() => handleAddTask('SubWorkflow')}
-                    >
-                      <PlusIcon className="h-5 w-5 mb-1 text-purple-500" />
-                      <span>SubWorkflow</span>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              {renderPropertiesPanel()}
+            <div className="space-y-2">
+              <Label htmlFor="workflow-description">Description</Label>
+              <Textarea
+                id="workflow-description"
+                value={workflow.description}
+                onChange={(e) =>
+                  setWorkflow((prev) => ({
+                    ...prev,
+                    description: e.target.value,
+                  }))
+                }
+              />
             </div>
           </div>
-        </TabsContent>
-        
-        <TabsContent value="json">
-          <Card>
-            <CardContent className="pt-6">
-              <pre className="bg-slate-50 p-4 rounded-lg overflow-auto max-h-[600px] text-xs">
-                {JSON.stringify(workflow, null, 2)}
-              </pre>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-      
-      {renderWorkflowTemplatesDialog()}
-      {renderPreviewDialog()}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSaveDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveWorkflow}>Save Workflow</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -90,7 +90,7 @@ const WorkflowDesignerPage = () => {
           </TabsList>
           
           <TabsContent value="designer">
-            <WorkflowDesigner />
+            <WorkflowDesigner workflowId={workflowId} />
           </TabsContent>
           
           <TabsContent value="documentation">
