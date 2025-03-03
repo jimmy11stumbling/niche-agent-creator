@@ -1,3 +1,4 @@
+
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
@@ -16,12 +17,28 @@ import {
   TrashIcon,
   ArrowRightIcon,
   Settings2Icon,
-  AlertCircleIcon
+  AlertCircleIcon,
+  GripVertical,
+  Link2Icon
 } from "lucide-react";
 
-// Mock API function - in a real app, this would be replaced with actual API calls
+// Enhanced Mock API functions with more realistic behavior
 const mockFetchWorkflow = async (id: string): Promise<Workflow> => {
-  // For demo purposes, return a sample workflow
+  console.log("Fetching workflow with ID:", id);
+  
+  // Simulate network delay
+  await new Promise(resolve => setTimeout(resolve, 800));
+  
+  // Check if workflow exists in localStorage
+  const savedWorkflows = JSON.parse(localStorage.getItem("workflows") || "[]");
+  const existingWorkflow = savedWorkflows.find((wf: Workflow) => wf.id === id);
+  
+  if (existingWorkflow) {
+    console.log("Found existing workflow:", existingWorkflow);
+    return existingWorkflow;
+  }
+  
+  // For demo purposes, return a sample workflow if none exists
   return {
     id,
     name: "Sample Workflow",
@@ -75,24 +92,55 @@ const mockFetchWorkflow = async (id: string): Promise<Workflow> => {
   };
 };
 
-// Mock save workflow function
+// Enhanced save workflow function with localStorage persistence
 const mockSaveWorkflow = async (workflow: Workflow): Promise<Workflow> => {
   console.log("Saving workflow:", workflow);
-  // Simulate API delay
+  
+  // Simulate network delay
   await new Promise(resolve => setTimeout(resolve, 1000));
-  return {
+  
+  const updatedWorkflow = {
     ...workflow,
     updatedAt: new Date().toISOString(),
     version: workflow.version + 1
   };
+  
+  // Save to localStorage
+  const savedWorkflows = JSON.parse(localStorage.getItem("workflows") || "[]");
+  const existingIndex = savedWorkflows.findIndex((wf: Workflow) => wf.id === workflow.id);
+  
+  if (existingIndex >= 0) {
+    savedWorkflows[existingIndex] = updatedWorkflow;
+  } else {
+    savedWorkflows.push(updatedWorkflow);
+  }
+  
+  localStorage.setItem("workflows", JSON.stringify(savedWorkflows));
+  return updatedWorkflow;
 };
 
-// Mock run workflow function
+// Enhanced run workflow function with execution history
 const mockRunWorkflow = async (workflowId: string): Promise<{ executionId: string }> => {
   console.log("Running workflow:", workflowId);
-  // Simulate API delay
+  
+  // Simulate network delay
   await new Promise(resolve => setTimeout(resolve, 1000));
-  return { executionId: uuidv4() };
+  
+  const executionId = uuidv4();
+  
+  // Save execution record to localStorage
+  const executions = JSON.parse(localStorage.getItem("workflow_executions") || "[]");
+  executions.push({
+    id: executionId,
+    workflowId,
+    status: "completed", // In a real system, this would initially be "running"
+    startTime: new Date().toISOString(),
+    endTime: new Date(Date.now() + 5000).toISOString(), // Simulate a 5-second run
+    taskResults: []
+  });
+  
+  localStorage.setItem("workflow_executions", JSON.stringify(executions));
+  return { executionId };
 };
 
 const WorkflowDesigner = () => {
@@ -116,15 +164,17 @@ const WorkflowDesigner = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
   const [currentTab, setCurrentTab] = useState("designer");
+  const [isAddingTransition, setIsAddingTransition] = useState(false);
+  const [transitionSource, setTransitionSource] = useState<string | null>(null);
   
-  // Fetch workflow if ID is provided
+  // Fix: Use useQuery with the proper approach for handling data
   const { isLoading: isLoadingWorkflow, data: workflowData } = useQuery({
     queryKey: ['workflow', workflowId],
     queryFn: () => workflowId ? mockFetchWorkflow(workflowId) : null,
     enabled: !!workflowId,
   });
 
-  // Process data after query completes
+  // Use useEffect to handle the data when it's available
   useEffect(() => {
     if (workflowData) {
       setWorkflow(workflowData);
@@ -160,16 +210,39 @@ const WorkflowDesigner = () => {
     }
   });
   
-  // Handle task creation
+  // Enhanced task creation with improved positioning
   const handleAddTask = (type: TaskType) => {
+    // Calculate a good position for the new task
+    let newPosition = { x: 200, y: 200 };
+    
+    if (workflow.tasks.length > 0) {
+      // Find the rightmost task
+      const rightmostTask = workflow.tasks.reduce((prev, current) => {
+        return (prev.position.x > current.position.x) ? prev : current;
+      });
+      
+      // Place new task to the right with some spacing
+      newPosition = {
+        x: rightmostTask.position.x + 250,
+        y: rightmostTask.position.y
+      };
+    }
+    
     const newTask: Task = {
       id: uuidv4(),
       name: `New ${type}`,
       type,
       parameters: {},
       dependencies: [],
-      position: { x: 200, y: 200 }
+      position: newPosition
     };
+    
+    // Add specific properties based on task type
+    if (type === 'Action') {
+      newTask.actionType = 'HttpRequest';
+    } else if (type === 'Condition') {
+      newTask.conditionLogic = '';
+    }
     
     setWorkflow(prev => ({
       ...prev,
@@ -181,13 +254,33 @@ const WorkflowDesigner = () => {
   
   // Handle task selection
   const handleSelectTask = (taskId: string) => {
+    if (isAddingTransition) {
+      if (transitionSource) {
+        // Complete the transition creation
+        handleAddTransition(transitionSource, taskId);
+        setIsAddingTransition(false);
+        setTransitionSource(null);
+      } else {
+        // Start the transition creation
+        setTransitionSource(taskId);
+        toast.info("Now select a destination task to create a connection");
+      }
+      return;
+    }
+    
     const task = workflow.tasks.find(t => t.id === taskId) || null;
     setSelectedTask(task);
     setSelectedTransition(null);
   };
   
-  // Handle task update
+  // Handle task update with improved validation
   const handleUpdateTask = (updatedTask: Task) => {
+    // Validate task data before updating
+    if (!updatedTask.name.trim()) {
+      toast.error("Task name cannot be empty");
+      return;
+    }
+    
     setWorkflow(prev => ({
       ...prev,
       tasks: prev.tasks.map(t => t.id === updatedTask.id ? updatedTask : t)
@@ -195,7 +288,7 @@ const WorkflowDesigner = () => {
     setSelectedTask(updatedTask);
   };
   
-  // Handle task deletion
+  // Enhanced task deletion with proper transition cleanup
   const handleDeleteTask = (taskId: string) => {
     setWorkflow(prev => ({
       ...prev,
@@ -208,10 +301,41 @@ const WorkflowDesigner = () => {
     if (selectedTask?.id === taskId) {
       setSelectedTask(null);
     }
+    
+    toast.success("Task deleted");
   };
   
-  // Handle transition creation
+  // Start transition creation mode
+  const handleStartTransition = (sourceTaskId: string) => {
+    setIsAddingTransition(true);
+    setTransitionSource(sourceTaskId);
+    toast.info("Now select a destination task to create a connection");
+  };
+  
+  // Cancel transition creation
+  const handleCancelTransition = () => {
+    setIsAddingTransition(false);
+    setTransitionSource(null);
+  };
+  
+  // Handle transition creation with validation
   const handleAddTransition = (sourceTaskId: string, targetTaskId: string) => {
+    // Validate the transition
+    if (sourceTaskId === targetTaskId) {
+      toast.error("Cannot create a transition to the same task");
+      return;
+    }
+    
+    // Check if this transition already exists
+    const existingTransition = workflow.transitions.find(
+      t => t.sourceTaskId === sourceTaskId && t.targetTaskId === targetTaskId
+    );
+    
+    if (existingTransition) {
+      toast.error("This connection already exists");
+      return;
+    }
+    
     const newTransition: Transition = {
       id: uuidv4(),
       sourceTaskId,
@@ -224,6 +348,7 @@ const WorkflowDesigner = () => {
     }));
     
     setSelectedTransition(newTransition);
+    toast.success("Connection created");
   };
   
   // Handle transition selection
@@ -254,80 +379,105 @@ const WorkflowDesigner = () => {
     if (selectedTransition?.id === transitionId) {
       setSelectedTransition(null);
     }
+    
+    toast.success("Connection deleted");
+  };
+  
+  // Enhanced drag and drop functionality for tasks
+  const handleTaskMouseDown = (e: React.MouseEvent, taskId: string) => {
+    if (isAddingTransition) return; // Don't start dragging in transition mode
+    
+    const task = workflow.tasks.find(t => t.id === taskId);
+    if (!task) return;
+    
+    setIsDragging(true);
+    setSelectedTask(task);
+    setSelectedTransition(null);
+    
+    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    const offsetY = e.clientY - rect.top;
+    
+    setDragStartPos({ x: offsetX, y: offsetY });
+    
+    // Add event listeners to window for mouse move and up
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDragging || !canvasRef.current) return;
+      
+      const canvasRect = canvasRef.current.getBoundingClientRect();
+      const newX = e.clientX - canvasRect.left - dragStartPos.x;
+      const newY = e.clientY - canvasRect.top - dragStartPos.y;
+      
+      // Update task position
+      setWorkflow(prev => ({
+        ...prev,
+        tasks: prev.tasks.map(t => t.id === taskId 
+          ? { ...t, position: { x: Math.max(0, newX), y: Math.max(0, newY) } } 
+          : t)
+      }));
+    };
+    
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+    
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
   };
   
   // Handle save workflow
   const handleSaveWorkflow = () => {
+    // Validate workflow before saving
+    if (!workflow.name.trim()) {
+      toast.error("Workflow name cannot be empty");
+      return;
+    }
+    
     saveWorkflowMutation.mutate(workflow);
   };
   
   // Handle run workflow
   const handleRunWorkflow = () => {
+    // Validate workflow before running
+    if (workflow.tasks.length === 0) {
+      toast.error("Cannot run an empty workflow");
+      return;
+    }
+    
+    // Check if there's a trigger task
+    const hasTrigger = workflow.tasks.some(task => task.type === 'Trigger');
+    if (!hasTrigger) {
+      toast.error("Workflow must have at least one Trigger task");
+      return;
+    }
+    
     runWorkflowMutation.mutate();
   };
   
-  // Simple canvas rendering - in a real app, this would be much more advanced
+  // Enhanced canvas rendering with improved visuals and interaction
   const renderCanvas = () => {
     return (
       <div 
         ref={canvasRef}
-        className="relative w-full h-[600px] bg-slate-50 border rounded-lg overflow-auto"
+        className={`relative w-full h-[600px] bg-slate-50 border rounded-lg overflow-auto ${
+          isAddingTransition ? 'cursor-crosshair' : 'cursor-default'
+        }`}
+        onClick={() => {
+          if (isAddingTransition) {
+            handleCancelTransition();
+          }
+        }}
       >
-        {/* Render tasks */}
-        {workflow.tasks.map(task => (
-          <div
-            key={task.id}
-            className={`absolute p-4 rounded-lg shadow-md cursor-move ${
-              selectedTask?.id === task.id ? 'ring-2 ring-primary' : ''
-            } ${
-              task.type === 'Action' ? 'bg-blue-100' :
-              task.type === 'Condition' ? 'bg-yellow-100' :
-              task.type === 'Trigger' ? 'bg-green-100' : 'bg-purple-100'
-            }`}
-            style={{
-              left: `${task.position.x}px`,
-              top: `${task.position.y}px`,
-              width: '200px'
-            }}
-            onClick={() => handleSelectTask(task.id)}
-          >
-            <div className="font-medium">{task.name}</div>
-            <div className="text-xs text-gray-500">{task.type}</div>
-            {task.actionType && (
-              <div className="text-xs text-gray-500">{task.actionType}</div>
-            )}
-          </div>
-        ))}
+        {/* Grid background for better visual orientation */}
+        <div className="absolute inset-0" style={{
+          backgroundImage: 'radial-gradient(circle, #e5e7eb 1px, transparent 1px)',
+          backgroundSize: '25px 25px'
+        }}></div>
         
-        {/* Render transitions (simplified) */}
+        {/* Render transitions first (so they appear beneath tasks) */}
         <svg className="absolute inset-0 pointer-events-none">
-          {workflow.transitions.map(transition => {
-            const sourceTask = workflow.tasks.find(t => t.id === transition.sourceTaskId);
-            const targetTask = workflow.tasks.find(t => t.id === transition.targetTaskId);
-            
-            if (!sourceTask || !targetTask) return null;
-            
-            const startX = sourceTask.position.x + 100;
-            const startY = sourceTask.position.y + 30;
-            const endX = targetTask.position.x;
-            const endY = targetTask.position.y + 30;
-            
-            return (
-              <g key={transition.id}>
-                <line
-                  x1={startX}
-                  y1={startY}
-                  x2={endX}
-                  y2={endY}
-                  stroke={selectedTransition?.id === transition.id ? "#0284c7" : "#94a3b8"}
-                  strokeWidth="2"
-                  markerEnd="url(#arrowhead)"
-                />
-              </g>
-            );
-          })}
-          
-          {/* Arrow marker definition */}
           <defs>
             <marker
               id="arrowhead"
@@ -340,13 +490,176 @@ const WorkflowDesigner = () => {
               <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8" />
             </marker>
           </defs>
+          
+          {workflow.transitions.map(transition => {
+            const sourceTask = workflow.tasks.find(t => t.id === transition.sourceTaskId);
+            const targetTask = workflow.tasks.find(t => t.id === transition.targetTaskId);
+            
+            if (!sourceTask || !targetTask) return null;
+            
+            const startX = sourceTask.position.x + 100;
+            const startY = sourceTask.position.y + 30;
+            const endX = targetTask.position.x;
+            const endY = targetTask.position.y + 30;
+            
+            // Create a curved path for nicer visualization
+            const dx = endX - startX;
+            const dy = endY - startY;
+            const controlX = startX + dx / 2;
+            const controlY = startY + dy / 2;
+            const pathData = `M ${startX} ${startY} Q ${controlX} ${controlY}, ${endX} ${endY}`;
+            
+            return (
+              <g key={transition.id} 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSelectTransition(transition.id);
+                }}
+                style={{ pointerEvents: 'all', cursor: 'pointer' }}
+              >
+                <path
+                  d={pathData}
+                  fill="none"
+                  stroke={selectedTransition?.id === transition.id ? "#0284c7" : "#94a3b8"}
+                  strokeWidth="2"
+                  markerEnd="url(#arrowhead)"
+                />
+                
+                {/* Invisible wider path for easier clicking */}
+                <path
+                  d={pathData}
+                  fill="none"
+                  stroke="transparent"
+                  strokeWidth="10"
+                  style={{ pointerEvents: 'all', cursor: 'pointer' }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSelectTransition(transition.id);
+                  }}
+                />
+              </g>
+            );
+          })}
+          
+          {/* Draw the in-progress transition during creation */}
+          {isAddingTransition && transitionSource && (
+            (() => {
+              const sourceTask = workflow.tasks.find(t => t.id === transitionSource);
+              if (!sourceTask) return null;
+              
+              const startX = sourceTask.position.x + 100;
+              const startY = sourceTask.position.y + 30;
+              
+              // Follow mouse position for the end point
+              const [mousePos, setMousePos] = useState({ x: startX + 100, y: startY });
+              
+              useEffect(() => {
+                const handleMouseMove = (e: MouseEvent) => {
+                  if (!canvasRef.current) return;
+                  
+                  const canvasRect = canvasRef.current.getBoundingClientRect();
+                  setMousePos({
+                    x: e.clientX - canvasRect.left,
+                    y: e.clientY - canvasRect.top
+                  });
+                };
+                
+                window.addEventListener('mousemove', handleMouseMove);
+                return () => window.removeEventListener('mousemove', handleMouseMove);
+              }, []);
+              
+              // Create a curved path
+              const dx = mousePos.x - startX;
+              const dy = mousePos.y - startY;
+              const controlX = startX + dx / 2;
+              const controlY = startY + dy / 2;
+              const pathData = `M ${startX} ${startY} Q ${controlX} ${controlY}, ${mousePos.x} ${mousePos.y}`;
+              
+              return (
+                <path
+                  d={pathData}
+                  fill="none"
+                  stroke="#0284c7"
+                  strokeWidth="2"
+                  strokeDasharray="5,5"
+                  markerEnd="url(#arrowhead)"
+                />
+              );
+            })()
+          )}
         </svg>
+        
+        {/* Render tasks */}
+        {workflow.tasks.map(task => (
+          <div
+            key={task.id}
+            className={`absolute p-4 rounded-lg shadow-md cursor-grab active:cursor-grabbing ${
+              selectedTask?.id === task.id ? 'ring-2 ring-primary' : ''
+            } ${
+              task.type === 'Action' ? 'bg-blue-100 border-blue-300' :
+              task.type === 'Condition' ? 'bg-yellow-100 border-yellow-300' :
+              task.type === 'Trigger' ? 'bg-green-100 border-green-300' : 'bg-purple-100 border-purple-300'
+            } border-2`}
+            style={{
+              left: `${task.position.x}px`,
+              top: `${task.position.y}px`,
+              width: '200px',
+              transition: isDragging && selectedTask?.id === task.id ? 'none' : 'box-shadow 0.2s ease'
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSelectTask(task.id);
+            }}
+            onMouseDown={(e) => {
+              if (!isAddingTransition) {
+                handleTaskMouseDown(e, task.id);
+              }
+            }}
+          >
+            <div className="flex items-center mb-2">
+              <GripVertical className="h-4 w-4 mr-2 text-gray-400" />
+              <div className="font-medium truncate flex-grow">{task.name}</div>
+              
+              {/* Connection point for creating transitions */}
+              <button 
+                className="ml-2 p-1 rounded-full hover:bg-blue-200"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleStartTransition(task.id);
+                }}
+                title="Create connection"
+              >
+                <Link2Icon className="h-4 w-4 text-blue-600" />
+              </button>
+            </div>
+            <div className="text-xs text-gray-500 font-medium">{task.type}</div>
+            {task.actionType && (
+              <div className="text-xs text-gray-500">{task.actionType}</div>
+            )}
+            {task.conditionLogic && (
+              <div className="text-xs text-gray-600 mt-1 bg-white p-1 rounded border border-yellow-200">
+                <code>{task.conditionLogic}</code>
+              </div>
+            )}
+          </div>
+        ))}
+        
+        {/* Add a helper message when the canvas is empty */}
+        {workflow.tasks.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+            <div className="text-center">
+              <Settings2Icon className="mx-auto h-10 w-10 mb-2" />
+              <p>Start by adding a task from the panel on the right</p>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
   
-  // Render the properties panel based on selection
+  // Enhanced properties panel with more task type options
   const renderPropertiesPanel = () => {
+    // Task properties panel
     if (selectedTask) {
       return (
         <Card>
@@ -366,7 +679,7 @@ const WorkflowDesigner = () => {
               
               <div>
                 <Label>Task Type</Label>
-                <div className="text-sm">{selectedTask.type}</div>
+                <div className="text-sm font-medium">{selectedTask.type}</div>
               </div>
               
               {selectedTask.type === 'Action' && (
@@ -387,6 +700,45 @@ const WorkflowDesigner = () => {
                     <option value="ScriptExecution">Script Execution</option>
                     <option value="DummyAction">Dummy Action</option>
                   </select>
+                  
+                  {/* Action-specific parameters */}
+                  {selectedTask.actionType === 'HttpRequest' && (
+                    <div className="mt-4 space-y-2">
+                      <Label htmlFor="requestUrl">URL</Label>
+                      <Input
+                        id="requestUrl"
+                        placeholder="https://api.example.com/endpoint"
+                        value={(selectedTask.parameters as any)?.url || ''}
+                        onChange={(e) => handleUpdateTask({
+                          ...selectedTask,
+                          parameters: { 
+                            ...selectedTask.parameters,
+                            url: e.target.value 
+                          }
+                        })}
+                      />
+                      
+                      <Label htmlFor="requestMethod">Method</Label>
+                      <select
+                        id="requestMethod"
+                        className="w-full p-2 border rounded-md"
+                        value={(selectedTask.parameters as any)?.method || 'GET'}
+                        onChange={(e) => handleUpdateTask({
+                          ...selectedTask,
+                          parameters: { 
+                            ...selectedTask.parameters,
+                            method: e.target.value 
+                          }
+                        })}
+                      >
+                        <option value="GET">GET</option>
+                        <option value="POST">POST</option>
+                        <option value="PUT">PUT</option>
+                        <option value="DELETE">DELETE</option>
+                        <option value="PATCH">PATCH</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
               )}
               
@@ -402,6 +754,10 @@ const WorkflowDesigner = () => {
                     })}
                     placeholder="e.g. data.status === 'success'"
                   />
+                  
+                  <p className="text-xs text-gray-500 mt-1">
+                    Use JavaScript expressions to define conditions. The workflow data is available as 'data'.
+                  </p>
                 </div>
               )}
               
@@ -420,22 +776,26 @@ const WorkflowDesigner = () => {
       );
     }
     
+    // Transition properties panel
     if (selectedTransition) {
+      const sourceTask = workflow.tasks.find(t => t.id === selectedTransition.sourceTaskId);
+      const targetTask = workflow.tasks.find(t => t.id === selectedTransition.targetTaskId);
+      
       return (
         <Card>
           <CardContent className="pt-6">
             <div className="space-y-4">
               <div>
                 <Label>Source Task</Label>
-                <div className="text-sm">
-                  {workflow.tasks.find(t => t.id === selectedTransition.sourceTaskId)?.name || 'Unknown'}
+                <div className="text-sm font-medium">
+                  {sourceTask?.name || 'Unknown'}
                 </div>
               </div>
               
               <div>
                 <Label>Target Task</Label>
-                <div className="text-sm">
-                  {workflow.tasks.find(t => t.id === selectedTransition.targetTaskId)?.name || 'Unknown'}
+                <div className="text-sm font-medium">
+                  {targetTask?.name || 'Unknown'}
                 </div>
               </div>
               
@@ -450,6 +810,9 @@ const WorkflowDesigner = () => {
                   })}
                   placeholder="Leave empty for unconditional transition"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Define an optional condition for this transition. If empty, the transition is always taken.
+                </p>
               </div>
               
               <Button
@@ -459,7 +822,7 @@ const WorkflowDesigner = () => {
                 className="mt-4"
               >
                 <TrashIcon className="h-4 w-4 mr-2" />
-                Delete Transition
+                Delete Connection
               </Button>
             </div>
           </CardContent>
@@ -467,18 +830,35 @@ const WorkflowDesigner = () => {
       );
     }
     
+    // Default properties panel
     return (
       <Card>
         <CardContent className="pt-6">
           <div className="text-center py-6 text-gray-500">
             <Settings2Icon className="mx-auto h-10 w-10 mb-2 text-gray-400" />
-            <p>Select a task or transition to edit its properties</p>
+            <p>Select a task or connection to edit its properties</p>
+            
+            {isAddingTransition && (
+              <div className="mt-4 p-2 bg-blue-50 rounded border border-blue-200 text-blue-700 text-sm">
+                <p className="font-medium">Creating connection</p>
+                <p className="text-xs mt-1">Click on another task to complete the connection or click anywhere to cancel.</p>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleCancelTransition}
+                  className="mt-2"
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
     );
   };
   
+  // Loading state
   if (isLoadingWorkflow) {
     return (
       <div className="container mx-auto px-4">
@@ -492,6 +872,7 @@ const WorkflowDesigner = () => {
     );
   }
   
+  // Main render
   return (
     <div className="container mx-auto px-4">
       <div className="flex justify-between items-center mb-6">
