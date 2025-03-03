@@ -4,6 +4,8 @@ import Footer from "@/components/Footer";
 import AgentCreator from "@/components/AgentCreator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { InfoIcon } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 
 const CreateAgentPage = () => {
   return (
@@ -18,6 +20,14 @@ const CreateAgentPage = () => {
               Some models require a Hugging Face account and token for access. If you encounter download issues, you can use Demo Mode to test your agent with simulated responses.
             </AlertDescription>
           </Alert>
+          
+          <div className="mt-4 flex items-center justify-end">
+            <Link to="/workflows">
+              <Button variant="outline">
+                Try Workflow Automation
+              </Button>
+            </Link>
+          </div>
         </div>
         <AgentCreator />
       </main>
