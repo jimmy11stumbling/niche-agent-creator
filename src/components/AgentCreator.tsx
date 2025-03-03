@@ -151,7 +151,7 @@ const AgentCreator = () => {
       const modelId = AVAILABLE_MODELS[agent.selectedModel]?.id || "google/gemma-2b";
       console.log(`Starting download of model: ${modelId}`);
       
-      const pipelineOptions = {
+      const pipelineOptions: any = {
         progress_callback: progressCallback,
       };
       

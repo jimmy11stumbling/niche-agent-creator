@@ -1,4 +1,3 @@
-
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
@@ -119,20 +118,18 @@ const WorkflowDesigner = () => {
   const [currentTab, setCurrentTab] = useState("designer");
   
   // Fetch workflow if ID is provided
-  const { isLoading: isLoadingWorkflow } = useQuery({
+  const { isLoading: isLoadingWorkflow, data: workflowData } = useQuery({
     queryKey: ['workflow', workflowId],
     queryFn: () => workflowId ? mockFetchWorkflow(workflowId) : null,
     enabled: !!workflowId,
-    onSuccess: (data) => {
-      if (data) {
-        setWorkflow(data);
-      }
-    },
-    onError: (error) => {
-      toast.error("Failed to load workflow");
-      console.error("Failed to load workflow:", error);
-    }
   });
+
+  // Process data after query completes
+  useEffect(() => {
+    if (workflowData) {
+      setWorkflow(workflowData);
+    }
+  }, [workflowData]);
   
   // Mutation for saving workflow
   const saveWorkflowMutation = useMutation({
