@@ -19,8 +19,19 @@ import {
   Settings2Icon,
   AlertCircleIcon,
   GripVertical,
-  Link2Icon
+  Link2Icon,
+  XIcon,
+  EyeIcon,
+  FileIcon,
+  FileTextIcon,
+  DatabaseIcon,
+  MailIcon,
+  CodeIcon
 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 // Enhanced Mock API functions with more realistic behavior
 const mockFetchWorkflow = async (id: string): Promise<Workflow> => {
@@ -166,12 +177,15 @@ const WorkflowDesigner = () => {
   const [currentTab, setCurrentTab] = useState("designer");
   const [isAddingTransition, setIsAddingTransition] = useState(false);
   const [transitionSource, setTransitionSource] = useState<string | null>(null);
+  const [showWorkflowTemplates, setShowWorkflowTemplates] = useState(false);
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
   
   // Fix: Use useQuery with the proper approach for handling data
   const { isLoading: isLoadingWorkflow, data: workflowData } = useQuery({
     queryKey: ['workflow', workflowId],
     queryFn: () => workflowId ? mockFetchWorkflow(workflowId) : null,
-    enabled: !!workflowId,
+    enabled: !!workflowId
   });
 
   // Use useEffect to handle the data when it's available
@@ -427,6 +441,80 @@ const WorkflowDesigner = () => {
     window.addEventListener('mouseup', handleMouseUp);
   };
   
+  // Validate workflow
+  const validateWorkflow = (): boolean => {
+    const errors: string[] = [];
+
+    // Check if workflow has a name
+    if (!workflow.name.trim()) {
+      errors.push("Workflow name cannot be empty");
+    }
+    
+    // Check if workflow has at least one task
+    if (workflow.tasks.length === 0) {
+      errors.push("Workflow must have at least one task");
+    }
+    
+    // Check if there's a trigger task
+    const hasTrigger = workflow.tasks.some(task => task.type === 'Trigger');
+    if (!hasTrigger) {
+      errors.push("Workflow must have at least one Trigger task");
+    }
+    
+    // Check for orphaned tasks (tasks with no connections)
+    workflow.tasks.forEach(task => {
+      if (task.type !== 'Trigger') {
+        const hasIncoming = workflow.transitions.some(t => t.targetTaskId === task.id);
+        if (!hasIncoming) {
+          errors.push(`Task "${task.name}" has no incoming connections`);
+        }
+      }
+      
+      if (task.type !== 'Action' && task.type !== 'Condition') {
+        const hasOutgoing = workflow.transitions.some(t => t.sourceTaskId === task.id);
+        if (!hasOutgoing) {
+          errors.push(`Task "${task.name}" has no outgoing connections`);
+        }
+      }
+    });
+    
+    // Check for cycles in the workflow
+    // This is a simplified cycle detection - a full implementation would require
+    // a more comprehensive graph traversal algorithm
+    const visited = new Set<string>();
+    const recursionStack = new Set<string>();
+    
+    const hasCycle = (taskId: string): boolean => {
+      visited.add(taskId);
+      recursionStack.add(taskId);
+      
+      const outgoingTransitions = workflow.transitions.filter(t => t.sourceTaskId === taskId);
+      for (const transition of outgoingTransitions) {
+        if (!visited.has(transition.targetTaskId)) {
+          if (hasCycle(transition.targetTaskId)) {
+            return true;
+          }
+        } else if (recursionStack.has(transition.targetTaskId)) {
+          return true;
+        }
+      }
+      
+      recursionStack.delete(taskId);
+      return false;
+    };
+    
+    const triggerTasks = workflow.tasks.filter(task => task.type === 'Trigger');
+    for (const triggerTask of triggerTasks) {
+      if (hasCycle(triggerTask.id)) {
+        errors.push("Workflow contains cycles, which are not allowed in a valid workflow");
+        break;
+      }
+    }
+    
+    setValidationErrors(errors);
+    return errors.length === 0;
+  };
+  
   // Handle save workflow
   const handleSaveWorkflow = () => {
     // Validate workflow before saving
@@ -441,19 +529,168 @@ const WorkflowDesigner = () => {
   // Handle run workflow
   const handleRunWorkflow = () => {
     // Validate workflow before running
-    if (workflow.tasks.length === 0) {
-      toast.error("Cannot run an empty workflow");
-      return;
-    }
-    
-    // Check if there's a trigger task
-    const hasTrigger = workflow.tasks.some(task => task.type === 'Trigger');
-    if (!hasTrigger) {
-      toast.error("Workflow must have at least one Trigger task");
+    if (!validateWorkflow()) {
+      setPreviewDialogOpen(true);
       return;
     }
     
     runWorkflowMutation.mutate();
+  };
+
+  // Load workflow template
+  const handleLoadTemplate = (templateId: string) => {
+    // Here you would fetch the template from your templates repository
+    // For now, we'll just use some hardcoded templates
+    const templates = {
+      "data-sync": {
+        name: "Data Synchronization",
+        description: "Sync data between two systems",
+        tasks: [
+          {
+            id: "trigger1",
+            name: "Schedule Trigger",
+            type: "Trigger",
+            parameters: { schedule: "0 0 * * *" },
+            dependencies: [],
+            position: { x: 100, y: 200 }
+          },
+          {
+            id: "action1",
+            name: "Fetch Source Data",
+            type: "Action",
+            actionType: "HttpRequest",
+            parameters: {
+              url: "https://source-api.example.com/data",
+              method: "GET"
+            },
+            dependencies: ["trigger1"],
+            position: { x: 350, y: 200 }
+          },
+          {
+            id: "action2",
+            name: "Transform Data",
+            type: "Action",
+            actionType: "ScriptExecution",
+            parameters: {
+              script: "// Transform data here"
+            },
+            dependencies: ["action1"],
+            position: { x: 600, y: 200 }
+          },
+          {
+            id: "action3",
+            name: "Send to Target",
+            type: "Action",
+            actionType: "HttpRequest",
+            parameters: {
+              url: "https://target-api.example.com/data",
+              method: "POST"
+            },
+            dependencies: ["action2"],
+            position: { x: 850, y: 200 }
+          }
+        ],
+        transitions: [
+          {
+            id: "t1",
+            sourceTaskId: "trigger1",
+            targetTaskId: "action1"
+          },
+          {
+            id: "t2",
+            sourceTaskId: "action1",
+            targetTaskId: "action2"
+          },
+          {
+            id: "t3",
+            sourceTaskId: "action2",
+            targetTaskId: "action3"
+          }
+        ]
+      },
+      "approval-process": {
+        name: "Approval Process",
+        description: "Handle approval workflows with conditions",
+        tasks: [
+          {
+            id: "trigger1",
+            name: "Request Submitted",
+            type: "Trigger",
+            parameters: {},
+            dependencies: [],
+            position: { x: 100, y: 200 }
+          },
+          {
+            id: "condition1",
+            name: "Check Amount",
+            type: "Condition",
+            conditionLogic: "data.amount > 1000",
+            parameters: {},
+            dependencies: ["trigger1"],
+            position: { x: 350, y: 200 }
+          },
+          {
+            id: "action1",
+            name: "Manager Approval",
+            type: "Action",
+            actionType: "HttpRequest",
+            parameters: {
+              url: "https://api.example.com/notify/manager",
+              method: "POST"
+            },
+            dependencies: ["condition1"],
+            position: { x: 600, y: 100 }
+          },
+          {
+            id: "action2",
+            name: "Auto Approval",
+            type: "Action",
+            actionType: "DatabaseOperation",
+            parameters: {
+              operation: "UPDATE",
+              table: "requests",
+              data: { status: "approved" }
+            },
+            dependencies: ["condition1"],
+            position: { x: 600, y: 300 }
+          }
+        ],
+        transitions: [
+          {
+            id: "t1",
+            sourceTaskId: "trigger1",
+            targetTaskId: "condition1"
+          },
+          {
+            id: "t2",
+            sourceTaskId: "condition1",
+            targetTaskId: "action1",
+            condition: "data.amount > 1000"
+          },
+          {
+            id: "t3",
+            sourceTaskId: "condition1",
+            targetTaskId: "action2",
+            condition: "data.amount <= 1000"
+          }
+        ]
+      }
+    };
+    
+    const template = templates[templateId as keyof typeof templates];
+    if (template) {
+      const newWorkflow = {
+        ...workflow,
+        name: template.name,
+        description: template.description,
+        tasks: template.tasks,
+        transitions: template.transitions
+      };
+      
+      setWorkflow(newWorkflow);
+      setShowWorkflowTemplates(false);
+      toast.success(`Template "${template.name}" applied successfully`);
+    }
   };
   
   // Enhanced canvas rendering with improved visuals and interaction
@@ -537,6 +774,20 @@ const WorkflowDesigner = () => {
                     handleSelectTransition(transition.id);
                   }}
                 />
+                
+                {/* Display transition condition if it exists */}
+                {transition.condition && (
+                  <foreignObject
+                    x={controlX - 80}
+                    y={controlY - 20}
+                    width="160"
+                    height="40"
+                  >
+                    <div className="bg-white border border-slate-200 rounded-md px-2 py-1 text-xs text-center text-slate-700">
+                      {transition.condition}
+                    </div>
+                  </foreignObject>
+                )}
               </g>
             );
           })}
@@ -641,6 +892,11 @@ const WorkflowDesigner = () => {
                 <code>{task.conditionLogic}</code>
               </div>
             )}
+            {task.retryPolicy && (
+              <div className="text-xs text-gray-500 mt-1">
+                Retries: {task.retryPolicy.attempts}
+              </div>
+            )}
           </div>
         ))}
         
@@ -650,6 +906,14 @@ const WorkflowDesigner = () => {
             <div className="text-center">
               <Settings2Icon className="mx-auto h-10 w-10 mb-2" />
               <p>Start by adding a task from the panel on the right</p>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="mt-4"
+                onClick={() => setShowWorkflowTemplates(true)}
+              >
+                Or use a template
+              </Button>
             </div>
           </div>
         )}
@@ -685,21 +949,24 @@ const WorkflowDesigner = () => {
               {selectedTask.type === 'Action' && (
                 <div>
                   <Label htmlFor="actionType">Action Type</Label>
-                  <select
-                    id="actionType"
-                    className="w-full p-2 border rounded-md"
+                  <Select
                     value={selectedTask.actionType || 'HttpRequest'}
-                    onChange={(e) => handleUpdateTask({
+                    onValueChange={(value) => handleUpdateTask({
                       ...selectedTask,
-                      actionType: e.target.value as ActionType
+                      actionType: value as ActionType
                     })}
                   >
-                    <option value="HttpRequest">HTTP Request</option>
-                    <option value="DatabaseOperation">Database Operation</option>
-                    <option value="MessageQueue">Message Queue</option>
-                    <option value="ScriptExecution">Script Execution</option>
-                    <option value="DummyAction">Dummy Action</option>
-                  </select>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select an action type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="HttpRequest">HTTP Request</SelectItem>
+                      <SelectItem value="DatabaseOperation">Database Operation</SelectItem>
+                      <SelectItem value="MessageQueue">Message Queue</SelectItem>
+                      <SelectItem value="ScriptExecution">Script Execution</SelectItem>
+                      <SelectItem value="DummyAction">Dummy Action</SelectItem>
+                    </SelectContent>
+                  </Select>
                   
                   {/* Action-specific parameters */}
                   {selectedTask.actionType === 'HttpRequest' && (
@@ -719,24 +986,135 @@ const WorkflowDesigner = () => {
                       />
                       
                       <Label htmlFor="requestMethod">Method</Label>
-                      <select
-                        id="requestMethod"
-                        className="w-full p-2 border rounded-md"
+                      <Select
                         value={(selectedTask.parameters as any)?.method || 'GET'}
+                        onValueChange={(value) => handleUpdateTask({
+                          ...selectedTask,
+                          parameters: { 
+                            ...selectedTask.parameters,
+                            method: value 
+                          }
+                        })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select HTTP method" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="GET">GET</SelectItem>
+                          <SelectItem value="POST">POST</SelectItem>
+                          <SelectItem value="PUT">PUT</SelectItem>
+                          <SelectItem value="DELETE">DELETE</SelectItem>
+                          <SelectItem value="PATCH">PATCH</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      
+                      <Label htmlFor="requestBody">Request Body (JSON)</Label>
+                      <Textarea
+                        id="requestBody"
+                        placeholder='{"key": "value"}'
+                        value={(selectedTask.parameters as any)?.body || ''}
                         onChange={(e) => handleUpdateTask({
                           ...selectedTask,
                           parameters: { 
                             ...selectedTask.parameters,
-                            method: e.target.value 
+                            body: e.target.value 
+                          }
+                        })}
+                      />
+                    </div>
+                  )}
+                  
+                  {selectedTask.actionType === 'DatabaseOperation' && (
+                    <div className="mt-4 space-y-2">
+                      <Label htmlFor="operation">Operation</Label>
+                      <Select
+                        value={(selectedTask.parameters as any)?.operation || 'SELECT'}
+                        onValueChange={(value) => handleUpdateTask({
+                          ...selectedTask,
+                          parameters: { 
+                            ...selectedTask.parameters,
+                            operation: value 
                           }
                         })}
                       >
-                        <option value="GET">GET</option>
-                        <option value="POST">POST</option>
-                        <option value="PUT">PUT</option>
-                        <option value="DELETE">DELETE</option>
-                        <option value="PATCH">PATCH</option>
-                      </select>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select operation" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="SELECT">SELECT</SelectItem>
+                          <SelectItem value="INSERT">INSERT</SelectItem>
+                          <SelectItem value="UPDATE">UPDATE</SelectItem>
+                          <SelectItem value="DELETE">DELETE</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      
+                      <Label htmlFor="table">Table Name</Label>
+                      <Input
+                        id="table"
+                        placeholder="users"
+                        value={(selectedTask.parameters as any)?.table || ''}
+                        onChange={(e) => handleUpdateTask({
+                          ...selectedTask,
+                          parameters: { 
+                            ...selectedTask.parameters,
+                            table: e.target.value 
+                          }
+                        })}
+                      />
+                      
+                      <Label htmlFor="query">SQL Query/Data</Label>
+                      <Textarea
+                        id="query"
+                        placeholder="SELECT * FROM users WHERE id = :id"
+                        value={(selectedTask.parameters as any)?.query || ''}
+                        onChange={(e) => handleUpdateTask({
+                          ...selectedTask,
+                          parameters: { 
+                            ...selectedTask.parameters,
+                            query: e.target.value 
+                          }
+                        })}
+                      />
+                    </div>
+                  )}
+                  
+                  {selectedTask.actionType === 'ScriptExecution' && (
+                    <div className="mt-4 space-y-2">
+                      <Label htmlFor="scriptType">Script Type</Label>
+                      <Select
+                        value={(selectedTask.parameters as any)?.scriptType || 'javascript'}
+                        onValueChange={(value) => handleUpdateTask({
+                          ...selectedTask,
+                          parameters: { 
+                            ...selectedTask.parameters,
+                            scriptType: value 
+                          }
+                        })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select script type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="javascript">JavaScript</SelectItem>
+                          <SelectItem value="python">Python</SelectItem>
+                          <SelectItem value="shell">Shell</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      
+                      <Label htmlFor="script">Script Content</Label>
+                      <Textarea
+                        id="script"
+                        placeholder="// Enter your script here"
+                        className="h-32 font-mono text-sm"
+                        value={(selectedTask.parameters as any)?.script || ''}
+                        onChange={(e) => handleUpdateTask({
+                          ...selectedTask,
+                          parameters: { 
+                            ...selectedTask.parameters,
+                            script: e.target.value 
+                          }
+                        })}
+                      />
                     </div>
                   )}
                 </div>
@@ -745,7 +1123,7 @@ const WorkflowDesigner = () => {
               {selectedTask.type === 'Condition' && (
                 <div>
                   <Label htmlFor="conditionLogic">Condition Logic</Label>
-                  <Input
+                  <Textarea
                     id="conditionLogic"
                     value={selectedTask.conditionLogic || ''}
                     onChange={(e) => handleUpdateTask({
@@ -753,6 +1131,7 @@ const WorkflowDesigner = () => {
                       conditionLogic: e.target.value
                     })}
                     placeholder="e.g. data.status === 'success'"
+                    className="font-mono text-sm"
                   />
                   
                   <p className="text-xs text-gray-500 mt-1">
@@ -760,6 +1139,172 @@ const WorkflowDesigner = () => {
                   </p>
                 </div>
               )}
+              
+              {selectedTask.type === 'Trigger' && (
+                <div>
+                  <Label htmlFor="triggerType">Trigger Type</Label>
+                  <Select
+                    value={(selectedTask.parameters as any)?.triggerType || 'webhook'}
+                    onValueChange={(value) => handleUpdateTask({
+                      ...selectedTask,
+                      parameters: { 
+                        ...selectedTask.parameters,
+                        triggerType: value 
+                      }
+                    })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select trigger type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="webhook">Webhook</SelectItem>
+                      <SelectItem value="schedule">Schedule</SelectItem>
+                      <SelectItem value="event">Event</SelectItem>
+                      <SelectItem value="manual">Manual</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  
+                  {(selectedTask.parameters as any)?.triggerType === 'schedule' && (
+                    <div className="mt-2">
+                      <Label htmlFor="schedule">Cron Schedule</Label>
+                      <Input
+                        id="schedule"
+                        placeholder="0 0 * * *"
+                        value={(selectedTask.parameters as any)?.schedule || ''}
+                        onChange={(e) => handleUpdateTask({
+                          ...selectedTask,
+                          parameters: { 
+                            ...selectedTask.parameters,
+                            schedule: e.target.value 
+                          }
+                        })}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Use cron syntax (e.g., "0 0 * * *" for daily at midnight)
+                      </p>
+                    </div>
+                  )}
+                  
+                  {(selectedTask.parameters as any)?.triggerType === 'webhook' && (
+                    <div className="mt-2">
+                      <Label htmlFor="webhookPath">Webhook Path</Label>
+                      <Input
+                        id="webhookPath"
+                        placeholder="/hooks/my-workflow"
+                        value={(selectedTask.parameters as any)?.webhookPath || ''}
+                        onChange={(e) => handleUpdateTask({
+                          ...selectedTask,
+                          parameters: { 
+                            ...selectedTask.parameters,
+                            webhookPath: e.target.value 
+                          }
+                        })}
+                      />
+                    </div>
+                  )}
+                  
+                  {(selectedTask.parameters as any)?.triggerType === 'event' && (
+                    <div className="mt-2">
+                      <Label htmlFor="eventName">Event Name</Label>
+                      <Input
+                        id="eventName"
+                        placeholder="user.created"
+                        value={(selectedTask.parameters as any)?.eventName || ''}
+                        onChange={(e) => handleUpdateTask({
+                          ...selectedTask,
+                          parameters: { 
+                            ...selectedTask.parameters,
+                            eventName: e.target.value 
+                          }
+                        })}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Advanced settings section */}
+              <div className="mt-4 border-t pt-4">
+                <h4 className="text-sm font-medium mb-2">Advanced Settings</h4>
+                
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="timeout">Timeout (ms)</Label>
+                    <Input
+                      id="timeout"
+                      type="number"
+                      placeholder="30000"
+                      value={selectedTask.timeout || ''}
+                      onChange={(e) => handleUpdateTask({
+                        ...selectedTask,
+                        timeout: e.target.value ? parseInt(e.target.value) : undefined
+                      })}
+                    />
+                  </div>
+                  
+                  <div>
+                    <Label>Retry Policy</Label>
+                    <div className="grid grid-cols-2 gap-2 mt-1">
+                      <div>
+                        <Label htmlFor="retryAttempts" className="text-xs">Attempts</Label>
+                        <Input
+                          id="retryAttempts"
+                          type="number"
+                          placeholder="3"
+                          value={selectedTask.retryPolicy?.attempts || ''}
+                          onChange={(e) => handleUpdateTask({
+                            ...selectedTask,
+                            retryPolicy: {
+                              ...selectedTask.retryPolicy || { backoffStrategy: 'fixed', initialInterval: 1000 },
+                              attempts: e.target.value ? parseInt(e.target.value) : 0
+                            }
+                          })}
+                        />
+                      </div>
+                      
+                      <div>
+                        <Label htmlFor="retryInterval" className="text-xs">Interval (ms)</Label>
+                        <Input
+                          id="retryInterval"
+                          type="number"
+                          placeholder="1000"
+                          value={selectedTask.retryPolicy?.initialInterval || ''}
+                          onChange={(e) => handleUpdateTask({
+                            ...selectedTask,
+                            retryPolicy: {
+                              ...selectedTask.retryPolicy || { backoffStrategy: 'fixed', attempts: 3 },
+                              initialInterval: e.target.value ? parseInt(e.target.value) : 1000
+                            }
+                          })}
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="mt-2">
+                      <Label htmlFor="backoffStrategy" className="text-xs">Backoff Strategy</Label>
+                      <Select
+                        value={selectedTask.retryPolicy?.backoffStrategy || 'fixed'}
+                        onValueChange={(value) => handleUpdateTask({
+                          ...selectedTask,
+                          retryPolicy: {
+                            ...selectedTask.retryPolicy || { attempts: 3, initialInterval: 1000 },
+                            backoffStrategy: value as 'fixed' | 'exponential' | 'linear'
+                          }
+                        })}
+                      >
+                        <SelectTrigger className="h-8 text-xs">
+                          <SelectValue placeholder="Select strategy" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="fixed">Fixed</SelectItem>
+                          <SelectItem value="exponential">Exponential</SelectItem>
+                          <SelectItem value="linear">Linear</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              </div>
               
               <Button
                 variant="destructive"
@@ -801,7 +1346,7 @@ const WorkflowDesigner = () => {
               
               <div>
                 <Label htmlFor="transitionCondition">Condition (Optional)</Label>
-                <Input
+                <Textarea
                   id="transitionCondition"
                   value={selectedTransition.condition || ''}
                   onChange={(e) => handleUpdateTransition({
@@ -809,6 +1354,7 @@ const WorkflowDesigner = () => {
                     condition: e.target.value
                   })}
                   placeholder="Leave empty for unconditional transition"
+                  className="font-mono text-sm"
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Define an optional condition for this transition. If empty, the transition is always taken.
@@ -858,6 +1404,121 @@ const WorkflowDesigner = () => {
     );
   };
   
+  // Render workflow templates dialog
+  const renderWorkflowTemplatesDialog = () => {
+    return (
+      <Dialog open={showWorkflowTemplates} onOpenChange={setShowWorkflowTemplates}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Workflow Templates</DialogTitle>
+            <DialogDescription>
+              Choose a template to quickly start with a pre-defined workflow
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+            <Card 
+              className="cursor-pointer hover:border-primary transition-all"
+              onClick={() => handleLoadTemplate("data-sync")}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center mb-2">
+                  <DatabaseIcon className="h-8 w-8 mr-2 text-blue-500" />
+                  <div>
+                    <h3 className="font-medium">Data Synchronization</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Sync data between two systems
+                    </p>
+                  </div>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  <p>4 tasks: Schedule Trigger → Fetch Source → Transform → Send to Target</p>
+                </div>
+              </CardContent>
+            </Card>
+            
+            <Card 
+              className="cursor-pointer hover:border-primary transition-all"
+              onClick={() => handleLoadTemplate("approval-process")}
+            >
+              <CardContent className="p-4">
+                <div className="flex items-center mb-2">
+                  <FileTextIcon className="h-8 w-8 mr-2 text-green-500" />
+                  <div>
+                    <h3 className="font-medium">Approval Process</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Handle approval workflows with conditions
+                    </p>
+                  </div>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  <p>4 tasks: Trigger → Condition → Manager Approval or Auto Approval</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowWorkflowTemplates(false)}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  };
+  
+  // Render workflow preview and validation dialog
+  const renderPreviewDialog = () => {
+    return (
+      <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <AlertCircleIcon className="h-5 w-5 text-amber-500 mr-2" />
+              Workflow Validation
+            </DialogTitle>
+            <DialogDescription>
+              Please address the following issues before running the workflow
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4">
+            {validationErrors.length > 0 ? (
+              <div className="space-y-2">
+                {validationErrors.map((error, index) => (
+                  <div key={index} className="flex items-start p-2 bg-red-50 border border-red-200 rounded text-sm">
+                    <AlertCircleIcon className="h-4 w-4 text-red-500 mr-2 mt-0.5 flex-shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-4 bg-green-50 border border-green-200 rounded text-sm flex items-center">
+                <CheckCircleIcon className="h-5 w-5 text-green-500 mr-2" />
+                Workflow is valid and ready to run
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreviewDialogOpen(false)}>
+              Close
+            </Button>
+            {validationErrors.length === 0 && (
+              <Button onClick={() => {
+                setPreviewDialogOpen(false);
+                runWorkflowMutation.mutate();
+              }}>
+                Run Workflow
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  };
+  
   // Loading state
   if (isLoadingWorkflow) {
     return (
@@ -877,15 +1538,52 @@ const WorkflowDesigner = () => {
     <div className="container mx-auto px-4">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold">{workflow.name}</h1>
-          <p className="text-gray-500">{workflow.description || 'No description'}</p>
+          <div className="flex items-center gap-2">
+            <Input
+              value={workflow.name}
+              onChange={(e) => setWorkflow(prev => ({
+                ...prev,
+                name: e.target.value
+              }))}
+              className="text-2xl font-bold bg-transparent border-transparent hover:border-gray-300 focus:border-primary w-auto min-w-[300px]"
+            />
+            <Badge variant="outline">{`v${workflow.version}`}</Badge>
+          </div>
+          <div className="flex mt-1 gap-4">
+            <Textarea
+              value={workflow.description}
+              onChange={(e) => setWorkflow(prev => ({
+                ...prev,
+                description: e.target.value
+              }))}
+              placeholder="Add a workflow description..."
+              className="h-8 text-sm text-gray-500 bg-transparent border-transparent hover:border-gray-300 focus:border-primary resize-none"
+            />
+          </div>
         </div>
         <div className="flex space-x-2">
-          <Button onClick={handleSaveWorkflow} disabled={saveWorkflowMutation.isPending}>
-            <SaveIcon className="h-4 w-4 mr-2" />
-            Save
+          <Button 
+            variant="outline" 
+            onClick={() => setPreviewDialogOpen(true)}
+            className="flex items-center"
+          >
+            <EyeIcon className="h-4 w-4 mr-2" />
+            Validate
           </Button>
-          <Button onClick={handleRunWorkflow} disabled={runWorkflowMutation.isPending} variant="secondary">
+          <Button 
+            onClick={handleSaveWorkflow} 
+            disabled={saveWorkflowMutation.isPending}
+            className="flex items-center"
+          >
+            <SaveIcon className="h-4 w-4 mr-2" />
+            Save{saveWorkflowMutation.isPending ? "ing..." : ""}
+          </Button>
+          <Button 
+            onClick={handleRunWorkflow} 
+            disabled={runWorkflowMutation.isPending} 
+            variant="secondary"
+            className="flex items-center"
+          >
             <PlayIcon className="h-4 w-4 mr-2" />
             Run
           </Button>
@@ -905,36 +1603,6 @@ const WorkflowDesigner = () => {
             </div>
             
             <div className="col-span-3 space-y-6">
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="workflowName">Workflow Name</Label>
-                      <Input
-                        id="workflowName"
-                        value={workflow.name}
-                        onChange={(e) => setWorkflow(prev => ({
-                          ...prev,
-                          name: e.target.value
-                        }))}
-                      />
-                    </div>
-                    
-                    <div>
-                      <Label htmlFor="workflowDescription">Description</Label>
-                      <Input
-                        id="workflowDescription"
-                        value={workflow.description}
-                        onChange={(e) => setWorkflow(prev => ({
-                          ...prev,
-                          description: e.target.value
-                        }))}
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              
               <Card>
                 <CardContent className="pt-6">
                   <h3 className="font-medium mb-4">Add Task</h3>
@@ -993,6 +1661,9 @@ const WorkflowDesigner = () => {
           </Card>
         </TabsContent>
       </Tabs>
+      
+      {renderWorkflowTemplatesDialog()}
+      {renderPreviewDialog()}
     </div>
   );
 };

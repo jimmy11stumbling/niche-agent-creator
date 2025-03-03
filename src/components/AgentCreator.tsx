@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -156,7 +155,6 @@ const AgentCreator = () => {
         progress_callback: progressCallback,
       };
       
-      // Fix: Only add token to options if authentication is required and token exists
       if (AVAILABLE_MODELS[agent.selectedModel]?.requiresAuth && hfToken) {
         pipelineOptions.token = hfToken;
       }
