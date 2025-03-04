@@ -47,6 +47,14 @@ export const ACTION_TYPE_PARAMS: Record<ActionType, Record<string, any>> = {
   "DatabaseOperation": { operation: "query", query: "", parameters: {} },
   "MessageQueue": { queue: "", message: "" },
   "ScriptExecution": { script: "", args: [] },
+  "DataProcessing": { 
+    dataSource: "csv", 
+    dataPath: "", 
+    outputFormat: "json", 
+    validation: false, 
+    validationRules: "", 
+    transformations: [] 
+  },
   "DummyAction": { delayMs: 1000, result: "success" },
 };
 

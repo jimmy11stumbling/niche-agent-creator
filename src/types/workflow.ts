@@ -1,6 +1,6 @@
 
 export type TaskType = "Action" | "Condition" | "Trigger" | "SubWorkflow";
-export type ActionType = "HttpRequest" | "DatabaseOperation" | "MessageQueue" | "ScriptExecution" | "DummyAction";
+export type ActionType = "HttpRequest" | "DatabaseOperation" | "MessageQueue" | "ScriptExecution" | "DataProcessing" | "DummyAction";
 
 export interface RetryPolicy {
   attempts: number;
