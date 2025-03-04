@@ -104,7 +104,7 @@ const WorkflowDesignerPage = () => {
                   Types include webhook, schedule, event, and manual triggers.
                 </li>
                 <li>
-                  <strong>Action</strong> - Performs operations like HTTP requests, database operations, message queue operations, or script execution.
+                  <strong>Action</strong> - Performs operations like HTTP requests, database operations, message queue operations, script execution, or data processing.
                 </li>
                 <li>
                   <strong>Condition</strong> - Creates branching paths in the workflow based on data-driven conditions. Uses JavaScript expressions for evaluation.
@@ -131,6 +131,25 @@ const WorkflowDesignerPage = () => {
                   <strong>Parameters</strong> - Configure task-specific parameters for customized behavior.
                 </li>
               </ul>
+
+              <h3>Data Processing Features</h3>
+              <p>
+                The workflow designer includes powerful data processing capabilities for transforming and validating data:
+              </p>
+              <ul>
+                <li>
+                  <strong>Data Sources</strong> - Configure various data sources including CSV, JSON, XML, TXT, and PDF files.
+                </li>
+                <li>
+                  <strong>Transformations</strong> - Apply normalization, filtering, and augmentation to your data.
+                </li>
+                <li>
+                  <strong>Validation</strong> - Define validation rules to ensure data quality and consistency.
+                </li>
+                <li>
+                  <strong>Output Formats</strong> - Export processed data in various formats like JSON, CSV, or XML.
+                </li>
+              </ul>
               
               <h3>Best Practices</h3>
               <ul>
@@ -140,6 +159,8 @@ const WorkflowDesignerPage = () => {
                 <li>Configure retry policies for tasks that might fail</li>
                 <li>Use the validation feature before running workflows</li>
                 <li>Break complex workflows into smaller, reusable sub-workflows</li>
+                <li>For data processing workflows, validate input data before processing</li>
+                <li>Use appropriate data transformation techniques based on your data type</li>
               </ul>
             </div>
           </TabsContent>

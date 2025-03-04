@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface TaskDialogProps {
   task: Task | null;
@@ -94,6 +95,9 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
                   <SelectItem value="MessageQueue">Message Queue</SelectItem>
                   <SelectItem value="ScriptExecution">
                     Script Execution
+                  </SelectItem>
+                  <SelectItem value="DataProcessing">
+                    Data Processing
                   </SelectItem>
                   <SelectItem value="DummyAction">
                     Dummy Action (Testing)
@@ -170,6 +174,168 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
                   placeholder="console.log('Hello, World!');"
                 />
               </div>
+            )}
+          
+          {/* Data Processing parameters */}
+          {task.type === "Action" &&
+            task.actionType === "DataProcessing" && (
+              <>
+                <div>
+                  <Label htmlFor="data-source">Data Source</Label>
+                  <Select
+                    value={task.parameters.dataSource || "csv"}
+                    onValueChange={(value) =>
+                      updateTask("parameters.dataSource", value)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select data source" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="csv">CSV File</SelectItem>
+                      <SelectItem value="json">JSON File</SelectItem>
+                      <SelectItem value="xml">XML File</SelectItem>
+                      <SelectItem value="txt">Text File</SelectItem>
+                      <SelectItem value="pdf">PDF Document</SelectItem>
+                      <SelectItem value="api">API Endpoint</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div>
+                  <Label htmlFor="data-path">Data Path or URL</Label>
+                  <Input
+                    id="data-path"
+                    value={task.parameters.dataPath || ""}
+                    onChange={(e) =>
+                      updateTask("parameters.dataPath", e.target.value)
+                    }
+                    placeholder="path/to/data.csv or https://api.example.com/data"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="output-format">Output Format</Label>
+                  <Select
+                    value={task.parameters.outputFormat || "json"}
+                    onValueChange={(value) =>
+                      updateTask("parameters.outputFormat", value)
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select output format" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="json">JSON</SelectItem>
+                      <SelectItem value="csv">CSV</SelectItem>
+                      <SelectItem value="xml">XML</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="enable-validation"
+                    checked={task.parameters.validation || false}
+                    onCheckedChange={(checked) =>
+                      updateTask("parameters.validation", checked)
+                    }
+                  />
+                  <Label htmlFor="enable-validation">Enable Validation</Label>
+                </div>
+                
+                {task.parameters.validation && (
+                  <div>
+                    <Label htmlFor="validation-rules">Validation Rules</Label>
+                    <Textarea
+                      id="validation-rules"
+                      value={task.parameters.validationRules || ""}
+                      onChange={(e) =>
+                        updateTask("parameters.validationRules", e.target.value)
+                      }
+                      placeholder="Enter validation rules as JSON"
+                      className="font-mono"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Example: {"{ \"requiredFields\": [\"name\", \"email\"], \"patterns\": { \"email\": \"^[\\\\w-\\\\.]+@([\\\\w-]+\\\\.)+[\\\\w-]{2,4}$\" } }"}
+                    </p>
+                  </div>
+                )}
+                
+                <div>
+                  <Label htmlFor="transformations">Transformations</Label>
+                  <div className="space-y-2 mt-2">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="normalize-transform"
+                        checked={task.parameters.transformations?.some((t: any) => t.type === "normalize") || false}
+                        onCheckedChange={(checked) => {
+                          const currentTransforms = task.parameters.transformations || [];
+                          const hasNormalize = currentTransforms.some((t: any) => t.type === "normalize");
+                          
+                          let newTransforms;
+                          if (checked && !hasNormalize) {
+                            newTransforms = [...currentTransforms, { type: "normalize" }];
+                          } else if (!checked && hasNormalize) {
+                            newTransforms = currentTransforms.filter((t: any) => t.type !== "normalize");
+                          } else {
+                            newTransforms = currentTransforms;
+                          }
+                          
+                          updateTask("parameters.transformations", newTransforms);
+                        }}
+                      />
+                      <Label htmlFor="normalize-transform">Normalize Text</Label>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="filter-transform"
+                        checked={task.parameters.transformations?.some((t: any) => t.type === "filter") || false}
+                        onCheckedChange={(checked) => {
+                          const currentTransforms = task.parameters.transformations || [];
+                          const hasFilter = currentTransforms.some((t: any) => t.type === "filter");
+                          
+                          let newTransforms;
+                          if (checked && !hasFilter) {
+                            newTransforms = [...currentTransforms, { type: "filter" }];
+                          } else if (!checked && hasFilter) {
+                            newTransforms = currentTransforms.filter((t: any) => t.type !== "filter");
+                          } else {
+                            newTransforms = currentTransforms;
+                          }
+                          
+                          updateTask("parameters.transformations", newTransforms);
+                        }}
+                      />
+                      <Label htmlFor="filter-transform">Filter Data</Label>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="augment-transform"
+                        checked={task.parameters.transformations?.some((t: any) => t.type === "augment") || false}
+                        onCheckedChange={(checked) => {
+                          const currentTransforms = task.parameters.transformations || [];
+                          const hasAugment = currentTransforms.some((t: any) => t.type === "augment");
+                          
+                          let newTransforms;
+                          if (checked && !hasAugment) {
+                            newTransforms = [...currentTransforms, { type: "augment" }];
+                          } else if (!checked && hasAugment) {
+                            newTransforms = currentTransforms.filter((t: any) => t.type !== "augment");
+                          } else {
+                            newTransforms = currentTransforms;
+                          }
+                          
+                          updateTask("parameters.transformations", newTransforms);
+                        }}
+                      />
+                      <Label htmlFor="augment-transform">Augment Data</Label>
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
           
           {/* Trigger parameters */}
