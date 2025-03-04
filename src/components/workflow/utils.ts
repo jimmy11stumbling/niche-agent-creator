@@ -22,15 +22,34 @@ export const fetchWorkflow = async (id: string): Promise<Workflow> => {
 export const validateWorkflow = (workflow: Workflow) => {
   const errors: string[] = [];
   
+  // Check workflow name
+  if (!workflow.name || workflow.name.trim() === '') {
+    errors.push("Workflow must have a name");
+  }
+  
   // Check for at least one task
   if (workflow.tasks.length === 0) {
     errors.push("Workflow must have at least one task");
+    return errors; // Early return if no tasks to avoid further errors
   }
   
   // Check for at least one trigger
   const hasTrigger = workflow.tasks.some((task) => task.type === "Trigger");
   if (!hasTrigger) {
     errors.push("Workflow must have at least one trigger task");
+  }
+  
+  // Check for task names
+  const emptyNameTasks = workflow.tasks.filter(task => !task.name || task.name.trim() === '');
+  if (emptyNameTasks.length > 0) {
+    errors.push(`Found ${emptyNameTasks.length} tasks without names`);
+  }
+  
+  // Check for duplicate task names
+  const taskNames = workflow.tasks.map(task => task.name);
+  const uniqueTaskNames = new Set(taskNames);
+  if (uniqueTaskNames.size !== taskNames.length) {
+    errors.push("Task names must be unique");
   }
   
   // Check for disconnected tasks
@@ -59,6 +78,22 @@ export const validateWorkflow = (workflow: Workflow) => {
   if (invalidTypeTasks.length > 0) {
     errors.push(`Found ${invalidTypeTasks.length} tasks with invalid types`);
   }
+  
+  // Check for invalid transitions
+  workflow.transitions.forEach(transition => {
+    const sourceExists = workflow.tasks.some(task => task.id === transition.sourceTaskId);
+    const targetExists = workflow.tasks.some(task => task.id === transition.targetTaskId);
+    
+    if (!sourceExists || !targetExists) {
+      errors.push(`Transition ${transition.id.substring(0, 8)} references missing task(s)`);
+    }
+    
+    // Check for conditions on transitions from condition tasks
+    const sourceTask = workflow.tasks.find(task => task.id === transition.sourceTaskId);
+    if (sourceTask?.type === "Condition" && !transition.condition) {
+      errors.push(`Transition from condition task '${sourceTask.name}' must have a condition`);
+    }
+  });
   
   return errors;
 };
