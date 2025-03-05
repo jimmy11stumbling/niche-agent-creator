@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,12 +26,10 @@ const TemplateGalleryDialog: React.FC<TemplateGalleryDialogProps> = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  // Extract categories from templates
   const categories = Array.from(
     new Set(WORKFLOW_TEMPLATES.map((template) => template.category))
   );
 
-  // Filter templates based on search term and category
   const filteredTemplates = WORKFLOW_TEMPLATES.filter((template) => {
     const matchesSearch =
       searchTerm === "" ||
