@@ -81,27 +81,22 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
             <div>
               <Label htmlFor="action-type">Action Type</Label>
               <Select
-                value={task.actionType || "HttpRequest"}
-                onValueChange={(value) => updateTask("actionType", value)}
+                value={task.actionType || "HTTP"}
+                onValueChange={(value) => updateTask("actionType", value as ActionType)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select action type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="HttpRequest">HTTP Request</SelectItem>
-                  <SelectItem value="DatabaseOperation">
-                    Database Operation
-                  </SelectItem>
+                  <SelectItem value="HTTP">HTTP Request</SelectItem>
+                  <SelectItem value="HttpRequest">HTTP Request (Legacy)</SelectItem>
+                  <SelectItem value="DatabaseOperation">Database Operation</SelectItem>
                   <SelectItem value="MessageQueue">Message Queue</SelectItem>
-                  <SelectItem value="ScriptExecution">
-                    Script Execution
-                  </SelectItem>
-                  <SelectItem value="DataProcessing">
-                    Data Processing
-                  </SelectItem>
-                  <SelectItem value="DummyAction">
-                    Dummy Action (Testing)
-                  </SelectItem>
+                  <SelectItem value="Email">Email</SelectItem>
+                  <SelectItem value="Notification">Notification</SelectItem>
+                  <SelectItem value="ScriptExecution">Script Execution</SelectItem>
+                  <SelectItem value="DataProcessing">Data Processing</SelectItem>
+                  <SelectItem value="DummyAction">Dummy Action (Testing)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -122,13 +117,13 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
           
           {/* HTTP Request parameters */}
           {task.type === "Action" &&
-            task.actionType === "HttpRequest" && (
+            (task.actionType === "HTTP" || task.actionType === "HttpRequest") && (
               <>
                 <div>
                   <Label htmlFor="http-url">URL</Label>
                   <Input
                     id="http-url"
-                    value={task.parameters.url || ""}
+                    value={task.parameters?.url || ""}
                     onChange={(e) =>
                       updateTask("parameters.url", e.target.value)
                     }
@@ -139,7 +134,7 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
                 <div>
                   <Label htmlFor="http-method">Method</Label>
                   <Select
-                    value={task.parameters.method || "GET"}
+                    value={task.parameters?.method || "GET"}
                     onValueChange={(value) =>
                       updateTask("parameters.method", value)
                     }
@@ -166,7 +161,7 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
                 <Label htmlFor="script-content">Script Content</Label>
                 <Textarea
                   id="script-content"
-                  value={task.parameters.script || ""}
+                  value={task.parameters?.script || ""}
                   onChange={(e) =>
                     updateTask("parameters.script", e.target.value)
                   }
@@ -183,7 +178,7 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
                 <div>
                   <Label htmlFor="data-source">Data Source</Label>
                   <Select
-                    value={task.parameters.dataSource || "csv"}
+                    value={task.parameters?.dataSource || "csv"}
                     onValueChange={(value) =>
                       updateTask("parameters.dataSource", value)
                     }
@@ -206,7 +201,7 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
                   <Label htmlFor="data-path">Data Path or URL</Label>
                   <Input
                     id="data-path"
-                    value={task.parameters.dataPath || ""}
+                    value={task.parameters?.dataPath || ""}
                     onChange={(e) =>
                       updateTask("parameters.dataPath", e.target.value)
                     }
@@ -217,7 +212,7 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
                 <div>
                   <Label htmlFor="output-format">Output Format</Label>
                   <Select
-                    value={task.parameters.outputFormat || "json"}
+                    value={task.parameters?.outputFormat || "json"}
                     onValueChange={(value) =>
                       updateTask("parameters.outputFormat", value)
                     }
@@ -236,7 +231,7 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="enable-validation"
-                    checked={task.parameters.validation || false}
+                    checked={task.parameters?.validation || false}
                     onCheckedChange={(checked) =>
                       updateTask("parameters.validation", checked)
                     }
@@ -244,12 +239,12 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
                   <Label htmlFor="enable-validation">Enable Validation</Label>
                 </div>
                 
-                {task.parameters.validation && (
+                {task.parameters?.validation && (
                   <div>
                     <Label htmlFor="validation-rules">Validation Rules</Label>
                     <Textarea
                       id="validation-rules"
-                      value={task.parameters.validationRules || ""}
+                      value={task.parameters?.validationRules || ""}
                       onChange={(e) =>
                         updateTask("parameters.validationRules", e.target.value)
                       }
@@ -268,9 +263,9 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
                     <div className="flex items-center space-x-2">
                       <Checkbox
                         id="normalize-transform"
-                        checked={task.parameters.transformations?.some((t: any) => t.type === "normalize") || false}
+                        checked={task.parameters?.transformations?.some((t: any) => t.type === "normalize") || false}
                         onCheckedChange={(checked) => {
-                          const currentTransforms = task.parameters.transformations || [];
+                          const currentTransforms = task.parameters?.transformations || [];
                           const hasNormalize = currentTransforms.some((t: any) => t.type === "normalize");
                           
                           let newTransforms;
@@ -291,9 +286,9 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
                     <div className="flex items-center space-x-2">
                       <Checkbox
                         id="filter-transform"
-                        checked={task.parameters.transformations?.some((t: any) => t.type === "filter") || false}
+                        checked={task.parameters?.transformations?.some((t: any) => t.type === "filter") || false}
                         onCheckedChange={(checked) => {
-                          const currentTransforms = task.parameters.transformations || [];
+                          const currentTransforms = task.parameters?.transformations || [];
                           const hasFilter = currentTransforms.some((t: any) => t.type === "filter");
                           
                           let newTransforms;
@@ -314,9 +309,9 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
                     <div className="flex items-center space-x-2">
                       <Checkbox
                         id="augment-transform"
-                        checked={task.parameters.transformations?.some((t: any) => t.type === "augment") || false}
+                        checked={task.parameters?.transformations?.some((t: any) => t.type === "augment") || false}
                         onCheckedChange={(checked) => {
-                          const currentTransforms = task.parameters.transformations || [];
+                          const currentTransforms = task.parameters?.transformations || [];
                           const hasAugment = currentTransforms.some((t: any) => t.type === "augment");
                           
                           let newTransforms;
@@ -344,7 +339,7 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
               <Label htmlFor="schedule">Schedule (Cron Expression)</Label>
               <Input
                 id="schedule"
-                value={task.parameters.schedule || ""}
+                value={task.parameters?.schedule || ""}
                 onChange={(e) =>
                   updateTask("parameters.schedule", e.target.value)
                 }

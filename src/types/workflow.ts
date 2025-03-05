@@ -5,6 +5,7 @@ export type Workflow = {
   description: string;
   createdAt: string;
   updatedAt: string;
+  version?: string;
   tasks: Task[];
   transitions: Transition[];
 };
@@ -34,7 +35,17 @@ export type Transition = {
 
 export type TaskType = "Trigger" | "Action" | "Condition" | "SubWorkflow";
 
-export type ActionType = "HTTP" | "Email" | "DataProcessing" | "Notification" | "Custom"; 
+export type ActionType = 
+  | "HTTP" 
+  | "Email" 
+  | "DataProcessing" 
+  | "Notification" 
+  | "Custom"
+  | "HttpRequest"
+  | "DatabaseOperation"
+  | "MessageQueue"
+  | "ScriptExecution"
+  | "DummyAction"; 
 
 export type TriggerType = "Schedule" | "WebHook" | "Event" | "UserAction";
 

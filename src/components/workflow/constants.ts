@@ -1,10 +1,10 @@
 
-import { TaskType, ActionType, TriggerType, WorkflowTemplate } from "@/types/workflow";
+import { TaskType, ActionType, TriggerType, WorkflowTemplate, Workflow } from "@/types/workflow";
 import { v4 as uuidv4 } from "uuid";
 
 export const TASK_TYPES: TaskType[] = ["Trigger", "Action", "Condition", "SubWorkflow"];
 
-export const ACTION_TYPES: ActionType[] = ["HTTP", "Email", "DataProcessing", "Notification", "Custom"];
+export const ACTION_TYPES: ActionType[] = ["HTTP", "Email", "DataProcessing", "Notification", "Custom", "HttpRequest", "DatabaseOperation", "MessageQueue", "ScriptExecution", "DummyAction"];
 
 export const TRIGGER_TYPES: TriggerType[] = ["Schedule", "WebHook", "Event", "UserAction"];
 
@@ -13,6 +13,47 @@ export const DEFAULT_TASK_NAME: Record<TaskType, string> = {
   Action: "New Action",
   Condition: "New Condition",
   SubWorkflow: "New Sub-Workflow",
+};
+
+// Templates for each task type
+export const TASK_TEMPLATES: Record<string, any> = {
+  Trigger: {
+    type: "Trigger",
+    triggerType: "Schedule",
+    parameters: {
+      schedule: "0 0 * * *",
+    },
+  },
+  Action: {
+    type: "Action",
+    actionType: "HTTP",
+    parameters: {
+      method: "GET",
+      url: "https://api.example.com/data",
+      headers: {},
+    },
+  },
+  DataProcessing: {
+    type: "Action",
+    actionType: "DataProcessing",
+    parameters: {
+      dataSource: "file://uploads/data.csv",
+      transformations: [],
+      outputFormat: "json",
+      validation: false,
+      validationRules: {}
+    },
+  },
+  Condition: {
+    type: "Condition",
+    conditionLogic: "data.value > 0",
+  },
+  SubWorkflow: {
+    type: "SubWorkflow",
+    parameters: {
+      workflowId: "",
+    },
+  },
 };
 
 export const ACTION_TYPE_PARAMS: Record<ActionType, Record<string, any>> = {
@@ -38,6 +79,25 @@ export const ACTION_TYPE_PARAMS: Record<ActionType, Record<string, any>> = {
     type: "info",
   },
   Custom: {},
+  HttpRequest: {
+    method: "GET",
+    url: "https://api.example.com/endpoint",
+    headers: {}
+  },
+  DatabaseOperation: {
+    operation: "query",
+    query: "SELECT * FROM table"
+  },
+  MessageQueue: {
+    queueName: "default",
+    message: {}
+  },
+  ScriptExecution: {
+    script: "console.log('Hello, World!');"
+  },
+  DummyAction: {
+    description: "This is a dummy action for testing"
+  }
 };
 
 export const TRIGGER_TYPE_PARAMS: Record<TriggerType, Record<string, any>> = {
@@ -57,7 +117,19 @@ export const TRIGGER_TYPE_PARAMS: Record<TriggerType, Record<string, any>> = {
   },
 };
 
-export const DEFAULT_WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
+// Default empty workflow
+export const DEFAULT_WORKFLOW: Workflow = {
+  id: uuidv4(),
+  name: "New Workflow",
+  description: "A new workflow",
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
+  version: "1.0.0",
+  tasks: [],
+  transitions: [],
+};
+
+export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   {
     id: "simple-schedule",
     name: "Simple Scheduled Task",

@@ -1,13 +1,16 @@
 
-import React from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import React, { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import { WORKFLOW_TEMPLATES } from "../constants";
 
@@ -20,42 +23,120 @@ const TemplateGalleryDialog: React.FC<TemplateGalleryDialogProps> = ({
   children,
   onSelectTemplate,
 }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  // Extract categories from templates
+  const categories = Array.from(
+    new Set(WORKFLOW_TEMPLATES.map((template) => template.category))
+  );
+
+  // Filter templates based on search term and category
+  const filteredTemplates = WORKFLOW_TEMPLATES.filter((template) => {
+    const matchesSearch =
+      searchTerm === "" ||
+      template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      template.description.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesCategory =
+      selectedCategory === null || template.category === selectedCategory;
+
+    return matchesSearch && matchesCategory;
+  });
+
+  const handleSelectTemplate = (templateId: string) => {
+    onSelectTemplate(templateId);
+    setIsOpen(false);
+  };
+
   return (
-    <Dialog>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>{children}</DialogTrigger>
+      <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Workflow Templates</DialogTitle>
           <DialogDescription>
-            Select a template to quickly create a workflow
+            Choose a template to start your workflow
           </DialogDescription>
         </DialogHeader>
-        
-        <ScrollArea className="h-[500px] pr-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
-            {WORKFLOW_TEMPLATES.map((template) => (
-              <Card
-                key={template.id}
-                className="cursor-pointer hover:border-primary transition-all"
-                onClick={() => onSelectTemplate(template.id)}
+
+        <div className="flex gap-4 mt-4">
+          <div className="w-1/4">
+            <Label className="mb-2 block">Categories</Label>
+            <div className="space-y-1">
+              <div
+                className={`px-2 py-1 rounded-sm cursor-pointer ${
+                  selectedCategory === null
+                    ? "bg-primary text-primary-foreground"
+                    : "hover:bg-accent"
+                }`}
+                onClick={() => setSelectedCategory(null)}
               >
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">{template.name}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm mb-2">{template.description}</p>
-                  <div className="flex items-center text-xs text-muted-foreground">
-                    <span className="bg-slate-100 px-2 py-1 rounded">
+                All Categories
+              </div>
+              {categories.map((category) => (
+                <div
+                  key={category}
+                  className={`px-2 py-1 rounded-sm cursor-pointer ${
+                    selectedCategory === category
+                      ? "bg-primary text-primary-foreground"
+                      : "hover:bg-accent"
+                  }`}
+                  onClick={() => setSelectedCategory(category)}
+                >
+                  {category}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <Separator orientation="vertical" />
+
+          <div className="w-3/4 space-y-4">
+            <Input
+              placeholder="Search templates..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+
+            <div className="grid grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2">
+              {filteredTemplates.map((template) => (
+                <div
+                  key={template.id}
+                  className="border rounded-md p-4 hover:border-primary cursor-pointer"
+                  onClick={() => handleSelectTemplate(template.id)}
+                >
+                  <h3 className="font-medium text-lg">{template.name}</h3>
+                  <p className="text-muted-foreground text-sm mb-2">
+                    {template.description}
+                  </p>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs bg-muted px-2 py-1 rounded">
                       {template.category}
                     </span>
-                    <span className="ml-2">
-                      {template.workflow.tasks.length} tasks
-                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectTemplate(template.id);
+                      }}
+                    >
+                      Use Template
+                    </Button>
                   </div>
-                </CardContent>
-              </Card>
-            ))}
+                </div>
+              ))}
+
+              {filteredTemplates.length === 0 && (
+                <div className="col-span-2 text-center py-8 text-muted-foreground">
+                  No templates found matching your criteria.
+                </div>
+              )}
+            </div>
           </div>
-        </ScrollArea>
+        </div>
       </DialogContent>
     </Dialog>
   );
