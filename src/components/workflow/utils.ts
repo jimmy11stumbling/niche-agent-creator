@@ -1,5 +1,5 @@
 
-import { Workflow, Task } from "@/types/workflow";
+import { Workflow, Task, ActionType } from "@/types/workflow";
 import { v4 as uuidv4 } from "uuid";
 
 // Mock function to fetch workflow

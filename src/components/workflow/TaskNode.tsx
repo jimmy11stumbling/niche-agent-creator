@@ -1,7 +1,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Task } from "@/types/workflow";
-import { ZapIcon, Play, AlertCircle, Copy } from "lucide-react";
+import { ZapIcon, Play, AlertCircle, Copy, Database } from "lucide-react";
 
 interface TaskNodeProps {
   task: Task;
@@ -21,6 +21,9 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, selected, onSelect, onMove })
       case "Trigger":
         return "bg-blue-100 border-blue-300";
       case "Action":
+        if (task.actionType === "DataProcessing") {
+          return "bg-indigo-100 border-indigo-300";
+        }
         return "bg-green-100 border-green-300";
       case "Condition":
         return "bg-amber-100 border-amber-300";
@@ -37,6 +40,9 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, selected, onSelect, onMove })
       case "Trigger":
         return <ZapIcon className="h-4 w-4 text-blue-600" />;
       case "Action":
+        if (task.actionType === "DataProcessing") {
+          return <Database className="h-4 w-4 text-indigo-600" />;
+        }
         return <Play className="h-4 w-4 text-green-600" />;
       case "Condition":
         return <AlertCircle className="h-4 w-4 text-amber-600" />;
@@ -110,7 +116,9 @@ const TaskNode: React.FC<TaskNodeProps> = ({ task, selected, onSelect, onMove })
         {getIcon()}
         <span className="font-medium text-sm">{task.name}</span>
       </div>
-      <div className="text-xs text-muted-foreground mt-1">{task.type}</div>
+      <div className="text-xs text-muted-foreground mt-1">
+        {task.type === "Action" && task.actionType ? `${task.actionType} ${task.type}` : task.type}
+      </div>
     </div>
   );
 };

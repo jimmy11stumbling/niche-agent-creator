@@ -96,16 +96,16 @@ const BlogPage = () => {
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">AgentCreator Blog</h1>
           <div className="flex gap-2">
-            <Badge variant="outline">All</Badge>
-            <Badge variant="outline">Product Updates</Badge>
-            <Badge variant="outline">Tutorials</Badge>
-            <Badge variant="outline">Industry Insights</Badge>
+            <Badge variant="outline" className="cursor-pointer hover:bg-secondary">All</Badge>
+            <Badge variant="outline" className="cursor-pointer hover:bg-secondary">Product Updates</Badge>
+            <Badge variant="outline" className="cursor-pointer hover:bg-secondary">Tutorials</Badge>
+            <Badge variant="outline" className="cursor-pointer hover:bg-secondary">Industry Insights</Badge>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {blogPosts.map((post) => (
-            <Card key={post.id} className="overflow-hidden flex flex-col">
+            <Card key={post.id} className="overflow-hidden flex flex-col hover:shadow-md transition-shadow">
               <CardHeader className="pb-4">
                 <div className="flex justify-between items-start mb-2">
                   <Badge variant="secondary">{post.category}</Badge>

@@ -32,18 +32,23 @@ const TransitionLine: React.FC<TransitionLineProps> = ({
   
   const path = `M ${sourceCenter.x} ${sourceCenter.y} Q ${midX + 30} ${midY} ${targetCenter.x} ${targetCenter.y}`;
 
+  // Determine if this is a data processing path
+  const isDataPath = 
+    (sourceTask.type === "Action" && sourceTask.actionType === "DataProcessing") ||
+    (targetTask.type === "Action" && targetTask.actionType === "DataProcessing");
+
   return (
     <g>
       <path
         d={path}
         fill="none"
-        stroke={selected ? "#0284c7" : "#94a3b8"}
+        stroke={selected ? "#0284c7" : isDataPath ? "#6366f1" : "#94a3b8"}
         strokeWidth={selected ? 2 : 1.5}
         strokeDasharray={condition ? "5,5" : undefined}
       />
       <polygon
         points={`${targetCenter.x},${targetCenter.y} ${targetCenter.x - 6},${targetCenter.y - 4} ${targetCenter.x - 6},${targetCenter.y + 4}`}
-        fill={selected ? "#0284c7" : "#94a3b8"}
+        fill={selected ? "#0284c7" : isDataPath ? "#6366f1" : "#94a3b8"}
         transform={`rotate(${Math.atan2(
           targetCenter.y - midY,
           targetCenter.x - midX

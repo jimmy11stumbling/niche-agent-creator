@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { 
-  Plus, Settings, Trash2, ArrowRight
+  Plus, Settings, Trash2, ArrowRight, Database
 } from "lucide-react";
 import { getTaskById } from "./utils";
 
@@ -101,6 +101,52 @@ const WorkflowEditorSidebar: React.FC<WorkflowEditorSidebarProps> = ({
                 readOnly
                 className="mt-1 bg-muted"
               />
+            </div>
+          )}
+          
+          {task.type === "Action" && task.actionType === "DataProcessing" && (
+            <div className="pt-2 space-y-2">
+              <h4 className="text-sm font-medium">Data Processing Configuration</h4>
+              
+              <div>
+                <Label className="text-xs">Data Source</Label>
+                <Input
+                  value={task.parameters?.dataSource || ""}
+                  readOnly
+                  className="mt-1 bg-muted text-xs h-8"
+                />
+              </div>
+              
+              <div>
+                <Label className="text-xs">Output Format</Label>
+                <Input
+                  value={task.parameters?.outputFormat || ""}
+                  readOnly
+                  className="mt-1 bg-muted text-xs h-8"
+                />
+              </div>
+              
+              <div>
+                <Label className="text-xs">Validation Enabled</Label>
+                <Input
+                  value={task.parameters?.validation ? "Yes" : "No"}
+                  readOnly
+                  className="mt-1 bg-muted text-xs h-8"
+                />
+              </div>
+              
+              {task.parameters?.transformations && task.parameters.transformations.length > 0 && (
+                <div>
+                  <Label className="text-xs">Transformations</Label>
+                  <div className="mt-1 p-2 bg-muted rounded text-xs">
+                    {task.parameters.transformations.map((t: any, i: number) => (
+                      <div key={i} className="mb-1">
+                        • {t.type}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           
@@ -230,6 +276,16 @@ const WorkflowEditorSidebar: React.FC<WorkflowEditorSidebarProps> = ({
         >
           <Plus className="h-4 w-4 mr-2" />
           Add Action
+        </Button>
+        
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full justify-start"
+          onClick={() => onAddTask("DataProcessing")}
+        >
+          <Database className="h-4 w-4 mr-2" />
+          Add Data Processing
         </Button>
         
         <Button
