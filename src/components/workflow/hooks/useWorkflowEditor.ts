@@ -600,6 +600,8 @@ export const useWorkflowEditor = (workflowId?: string) => {
     handleSaveTransitionChanges,
     handleNewWorkflow,
     handleDuplicateWorkflow,
-    updateTaskBeingEdited
+    updateTaskBeingEdited,
+    setTaskBeingEdited,
+    setTransitionBeingEdited
   };
 };

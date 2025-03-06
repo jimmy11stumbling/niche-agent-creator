@@ -43,6 +43,37 @@ export const ACTION_TYPE_PARAMS = {
     endpoint: "",
     method: "POST",
     authentication: {}
+  },
+  WebCrawling: {
+    url: "https://example.com",
+    depth: 2,
+    followLinks: false,
+    maxPages: 10,
+    excludePatterns: "",
+    outputFormat: "json",
+    extractRules: ""
+  },
+  AICompletion: {
+    model: "gpt-4-turbo",
+    prompt: "",
+    temperature: 0.7,
+    maxTokens: 1000,
+    topP: 1,
+    frequencyPenalty: 0,
+    presencePenalty: 0
+  },
+  MessageQueue: {
+    queueType: "rabbitmq",
+    connectionString: "",
+    queueName: "",
+    message: "",
+    messageType: "json"
+  },
+  FileOperation: {
+    operation: "read",
+    filePath: "",
+    encoding: "utf8",
+    content: ""
   }
 };
 

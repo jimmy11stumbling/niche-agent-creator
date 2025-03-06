@@ -20,6 +20,7 @@ import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
 import WorkflowDashboardPage from "./pages/WorkflowDashboardPage";
 import WorkflowDesignerPage from "./pages/WorkflowDesignerPage";
 import DeploymentPage from "./pages/DeploymentPage";
+import DataAnalysisPage from "./pages/DataAnalysisPage";
 
 function App() {
   return (
@@ -42,6 +43,7 @@ function App() {
         <Route path="/workflow-designer" element={<WorkflowDesignerPage />} />
         <Route path="/workflow-designer/:workflowId" element={<WorkflowDesignerPage />} />
         <Route path="/deploy/:agentId" element={<DeploymentPage />} />
+        <Route path="/data-analysis" element={<DataAnalysisPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
