@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
@@ -9,6 +8,7 @@ import {
   getTaskById, saveWorkflow 
 } from "../utils";
 import { DEFAULT_WORKFLOW, TASK_TEMPLATES, WORKFLOW_TEMPLATES } from "../constants";
+import { ACTION_TYPE_PARAMS } from "../utils/actionTypeParams";
 
 export const useWorkflowEditor = (workflowId?: string) => {
   const [workflow, setWorkflow] = useState<Workflow>(DEFAULT_WORKFLOW);
@@ -32,21 +32,18 @@ export const useWorkflowEditor = (workflowId?: string) => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  // Setup query to fetch workflow if ID is provided
   const { data: fetchedWorkflow } = useQuery({
     queryKey: ["workflow", workflowId],
     queryFn: () => workflowId ? fetchWorkflow(workflowId) : Promise.resolve(null),
     enabled: !!workflowId,
   });
 
-  // Update workflow when fetched data changes
   useEffect(() => {
     if (fetchedWorkflow) {
       setWorkflow(fetchedWorkflow);
     }
   }, [fetchedWorkflow]);
 
-  // Load saved workflows
   useEffect(() => {
     const savedWorkflowsString = localStorage.getItem("workflows");
     if (savedWorkflowsString) {
@@ -59,7 +56,6 @@ export const useWorkflowEditor = (workflowId?: string) => {
     }
   }, []);
 
-  // Add a new task to the workflow
   const handleAddTask = (type: any) => {
     const newTaskId = uuidv4();
     const centerX = canvasRef.current ? canvasRef.current.clientWidth / 2 - 80 : 300;
@@ -87,13 +83,11 @@ export const useWorkflowEditor = (workflowId?: string) => {
     });
   };
 
-  // Start creating a connection between tasks
   const handleStartConnecting = (sourceId: string) => {
     setConnecting(true);
     setConnectingSourceId(sourceId);
   };
 
-  // Update the position of a connection in progress
   const handleCanvasMouseMove = (e: React.MouseEvent) => {
     if (connecting && connectingSourceId && canvasRef.current) {
       const rect = canvasRef.current.getBoundingClientRect();
@@ -107,12 +101,9 @@ export const useWorkflowEditor = (workflowId?: string) => {
     }
   };
 
-  // Complete a connection between tasks
   const handleCanvasClick = (e: React.MouseEvent) => {
-    // If not connecting or a task is already selected, do nothing
     if (!connecting || !connectingSourceId) {
       if (!selectedTaskId && !selectedTransitionId) {
-        // Deselect everything when clicking on the canvas
         setSelectedTaskId(null);
         setSelectedTransitionId(null);
       }
@@ -124,10 +115,8 @@ export const useWorkflowEditor = (workflowId?: string) => {
     setConnectingSourceId(null);
   };
 
-  // Create a connection when a task is clicked while connecting
   const handleTaskSelectWhileConnecting = (targetId: string) => {
     if (connecting && connectingSourceId) {
-      // Check if connection already exists
       const existingConnection = workflow.transitions.find(
         (t) => t.sourceTaskId === connectingSourceId && t.targetTaskId === targetId
       );
@@ -141,7 +130,6 @@ export const useWorkflowEditor = (workflowId?: string) => {
         return;
       }
       
-      // Check if it's the same task
       if (connectingSourceId === targetId) {
         toast({
           title: "Invalid Connection",
@@ -173,13 +161,11 @@ export const useWorkflowEditor = (workflowId?: string) => {
       });
     }
     
-    // End connecting mode
     setConnecting(false);
     setConnectionInProgress(null);
     setConnectingSourceId(null);
   };
 
-  // Handle task selection
   const handleTaskSelect = (id: string) => {
     if (connecting && connectingSourceId) {
       handleTaskSelectWhileConnecting(id);
@@ -189,13 +175,11 @@ export const useWorkflowEditor = (workflowId?: string) => {
     }
   };
 
-  // Handle transition selection
   const handleTransitionSelect = (id: string) => {
     setSelectedTransitionId(id);
     setSelectedTaskId(null);
   };
 
-  // Move a task to a new position
   const handleTaskMove = (id: string, position: { x: number; y: number }) => {
     setWorkflow((prev) => ({
       ...prev,
@@ -207,10 +191,8 @@ export const useWorkflowEditor = (workflowId?: string) => {
     setIsDirty(true);
   };
 
-  // Delete a selected task
   const handleDeleteTask = () => {
     if (selectedTaskId) {
-      // First, remove all transitions connected to this task
       const filteredTransitions = workflow.transitions.filter(
         (t) => t.sourceTaskId !== selectedTaskId && t.targetTaskId !== selectedTaskId
       );
@@ -232,7 +214,6 @@ export const useWorkflowEditor = (workflowId?: string) => {
     }
   };
 
-  // Delete a selected transition
   const handleDeleteTransition = () => {
     if (selectedTransitionId) {
       setWorkflow((prev) => ({
@@ -251,7 +232,6 @@ export const useWorkflowEditor = (workflowId?: string) => {
     }
   };
 
-  // Save the workflow
   const handleSaveWorkflow = () => {
     const updatedWorkflows = saveWorkflow(workflow);
     setSavedWorkflows(updatedWorkflows);
@@ -265,7 +245,6 @@ export const useWorkflowEditor = (workflowId?: string) => {
     setShowSaveDialog(false);
   };
 
-  // Update workflow fields (name, description)
   const handleWorkflowFieldChange = (field: string, value: string) => {
     setWorkflow((prev) => ({
       ...prev,
@@ -275,7 +254,6 @@ export const useWorkflowEditor = (workflowId?: string) => {
     setIsDirty(true);
   };
 
-  // Load an existing workflow
   const handleLoadWorkflow = (workflowToLoad: Workflow) => {
     setWorkflow(workflowToLoad);
     setSelectedTaskId(null);
@@ -288,7 +266,6 @@ export const useWorkflowEditor = (workflowId?: string) => {
     });
   };
 
-  // Apply a workflow template
   const handleApplyTemplate = (templateId: string) => {
     const template = WORKFLOW_TEMPLATES.find((t) => t.id === templateId);
     
@@ -307,7 +284,6 @@ export const useWorkflowEditor = (workflowId?: string) => {
     }
   };
 
-  // Export workflow to JSON
   const handleExportWorkflow = () => {
     const workflowJson = JSON.stringify(workflow, null, 2);
     const blob = new Blob([workflowJson], { type: "application/json" });
@@ -327,7 +303,6 @@ export const useWorkflowEditor = (workflowId?: string) => {
     });
   };
 
-  // Import workflow from JSON
   const handleImportWorkflow = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     
@@ -340,12 +315,10 @@ export const useWorkflowEditor = (workflowId?: string) => {
           try {
             const importedWorkflow = JSON.parse(event.target.result as string);
             
-            // Validate the imported workflow
             if (!importedWorkflow.id || !importedWorkflow.tasks || !importedWorkflow.transitions) {
               throw new Error("Invalid workflow format");
             }
             
-            // Assign a new ID if not loading an existing workflow
             if (!workflowId) {
               importedWorkflow.id = uuidv4();
             }
@@ -373,7 +346,6 @@ export const useWorkflowEditor = (workflowId?: string) => {
     }
   };
 
-  // Run the workflow validation
   const handleValidateWorkflow = () => {
     const errors = validateWorkflow(workflow);
     setValidationErrors(errors);
@@ -381,7 +353,6 @@ export const useWorkflowEditor = (workflowId?: string) => {
     return errors.length === 0;
   };
 
-  // Run the workflow (simulation)
   const handleRunWorkflow = () => {
     if (!handleValidateWorkflow()) {
       return;
@@ -389,14 +360,12 @@ export const useWorkflowEditor = (workflowId?: string) => {
     
     setIsLoading(true);
     
-    // Simulate workflow execution
     setTimeout(() => {
       toast({
         title: "Workflow Started",
         description: "Workflow execution has been initiated",
       });
       
-      // Record execution in localStorage
       const executions = JSON.parse(localStorage.getItem("workflowExecutions") || "[]");
       const newExecution = {
         id: uuidv4(),
@@ -413,7 +382,6 @@ export const useWorkflowEditor = (workflowId?: string) => {
       executions.push(newExecution);
       localStorage.setItem("workflowExecutions", JSON.stringify(executions));
       
-      // Simulate execution completion after delay
       setTimeout(() => {
         const updatedExecutions = JSON.parse(
           localStorage.getItem("workflowExecutions") || "[]"
@@ -451,7 +419,6 @@ export const useWorkflowEditor = (workflowId?: string) => {
     }, 1000);
   };
 
-  // Edit a task's properties
   const handleEditTask = () => {
     if (selectedTaskId) {
       const task = getTaskById(workflow.tasks, selectedTaskId);
@@ -461,7 +428,6 @@ export const useWorkflowEditor = (workflowId?: string) => {
     }
   };
 
-  // Edit a transition's properties
   const handleEditTransition = () => {
     if (selectedTransitionId) {
       const transition = workflow.transitions.find(
@@ -473,7 +439,6 @@ export const useWorkflowEditor = (workflowId?: string) => {
     }
   };
 
-  // Save task changes
   const handleSaveTaskChanges = () => {
     if (taskBeingEdited) {
       setWorkflow((prev) => ({
@@ -494,7 +459,6 @@ export const useWorkflowEditor = (workflowId?: string) => {
     }
   };
 
-  // Save transition changes
   const handleSaveTransitionChanges = () => {
     if (transitionBeingEdited) {
       setWorkflow((prev) => ({
@@ -517,7 +481,6 @@ export const useWorkflowEditor = (workflowId?: string) => {
     }
   };
 
-  // Create a new workflow
   const handleNewWorkflow = () => {
     if (isDirty) {
       setShowSaveDialog(true);
@@ -539,7 +502,6 @@ export const useWorkflowEditor = (workflowId?: string) => {
     }
   };
 
-  // Create a duplicate of the current workflow
   const handleDuplicateWorkflow = () => {
     const newWorkflow = {
       ...workflow,
@@ -558,18 +520,15 @@ export const useWorkflowEditor = (workflowId?: string) => {
     });
   };
 
-  // Update task being edited
   const updateTaskBeingEdited = (field: string, value: any) => {
     if (taskBeingEdited) {
       if (field === "actionType" && taskBeingEdited.type === "Action") {
-        // When action type changes, update parameters with defaults
         setTaskBeingEdited({
           ...taskBeingEdited,
           actionType: value as any,
           parameters: ACTION_TYPE_PARAMS[value as any],
         });
       } else if (field.startsWith("parameters.") && taskBeingEdited.parameters) {
-        // Handle nested parameters
         const paramName = field.split(".")[1];
         setTaskBeingEdited({
           ...taskBeingEdited,
@@ -579,7 +538,6 @@ export const useWorkflowEditor = (workflowId?: string) => {
           },
         });
       } else {
-        // Handle regular fields
         setTaskBeingEdited({
           ...taskBeingEdited,
           [field]: value,
@@ -588,7 +546,6 @@ export const useWorkflowEditor = (workflowId?: string) => {
     }
   };
 
-  // Get the source and target task names for a transition
   const getTransitionTaskNames = () => {
     if (!transitionBeingEdited) return { sourceTaskName: '', targetTaskName: '' };
     

@@ -1,5 +1,5 @@
 
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
 import { lazy, Suspense } from "react";
 
@@ -27,7 +27,7 @@ function App() {
       <Toaster />
       <Routes>
         <Route path="/" element={<MVPPage />} />
-        <Route path="/home" element={<Index />} />
+        <Route path="/home" element={<Navigate to="/" replace />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/pricing" element={<PricingPage />} />
         <Route path="/templates" element={<TemplatesPage />} />

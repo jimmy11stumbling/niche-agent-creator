@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DataTransformation } from "@/types/workflow";
+import { Card, CardContent } from "@/components/ui/card";
 
 interface DataProcessingSettingsProps {
   dataSource: string;
@@ -42,6 +43,28 @@ const DataProcessingSettings: React.FC<DataProcessingSettingsProps> = ({
   onValidationRulesChange,
   onTransformationsChange,
 }) => {
+  // Helper function to check if a transformation exists
+  const hasTransformation = (type: string) => {
+    return transformations?.some((t) => t.type === type) || false;
+  };
+
+  // Helper function to toggle a transformation
+  const toggleTransformation = (type: string, checked: boolean) => {
+    const currentTransforms = transformations || [];
+    const hasTransform = hasTransformation(type);
+    
+    let newTransforms;
+    if (checked && !hasTransform) {
+      newTransforms = [...currentTransforms, { type }];
+    } else if (!checked && hasTransform) {
+      newTransforms = currentTransforms.filter((t) => t.type !== type);
+    } else {
+      newTransforms = currentTransforms;
+    }
+    
+    onTransformationsChange(newTransforms);
+  };
+
   return (
     <>
       <div>
@@ -60,6 +83,7 @@ const DataProcessingSettings: React.FC<DataProcessingSettingsProps> = ({
             <SelectItem value="txt">Text File</SelectItem>
             <SelectItem value="pdf">PDF Document</SelectItem>
             <SelectItem value="api">API Endpoint</SelectItem>
+            <SelectItem value="database">Database Query</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -87,9 +111,63 @@ const DataProcessingSettings: React.FC<DataProcessingSettingsProps> = ({
             <SelectItem value="json">JSON</SelectItem>
             <SelectItem value="csv">CSV</SelectItem>
             <SelectItem value="xml">XML</SelectItem>
+            <SelectItem value="parquet">Parquet</SelectItem>
+            <SelectItem value="xlsx">Excel</SelectItem>
           </SelectContent>
         </Select>
       </div>
+      
+      <Card className="border-dashed">
+        <CardContent className="pt-4">
+          <h3 className="font-medium mb-2">Transformations</h3>
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="normalize-transform"
+                checked={hasTransformation("normalize")}
+                onCheckedChange={(checked) => toggleTransformation("normalize", !!checked)}
+              />
+              <Label htmlFor="normalize-transform">Normalize Text</Label>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="filter-transform"
+                checked={hasTransformation("filter")}
+                onCheckedChange={(checked) => toggleTransformation("filter", !!checked)}
+              />
+              <Label htmlFor="filter-transform">Filter Data</Label>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="augment-transform"
+                checked={hasTransformation("augment")}
+                onCheckedChange={(checked) => toggleTransformation("augment", !!checked)}
+              />
+              <Label htmlFor="augment-transform">Augment Data</Label>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="aggregate-transform"
+                checked={hasTransformation("aggregate")}
+                onCheckedChange={(checked) => toggleTransformation("aggregate", !!checked)}
+              />
+              <Label htmlFor="aggregate-transform">Aggregate Data</Label>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="merge-transform"
+                checked={hasTransformation("merge")}
+                onCheckedChange={(checked) => toggleTransformation("merge", !!checked)}
+              />
+              <Label htmlFor="merge-transform">Merge Datasets</Label>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
       
       <div className="flex items-center space-x-2">
         <Checkbox
@@ -115,80 +193,6 @@ const DataProcessingSettings: React.FC<DataProcessingSettingsProps> = ({
           </p>
         </div>
       )}
-      
-      <div>
-        <Label htmlFor="transformations">Transformations</Label>
-        <div className="space-y-2 mt-2">
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="normalize-transform"
-              checked={transformations?.some((t) => t.type === "normalize") || false}
-              onCheckedChange={(checked) => {
-                const currentTransforms = transformations || [];
-                const hasNormalize = currentTransforms.some((t) => t.type === "normalize");
-                
-                let newTransforms;
-                if (checked && !hasNormalize) {
-                  newTransforms = [...currentTransforms, { type: "normalize" }];
-                } else if (!checked && hasNormalize) {
-                  newTransforms = currentTransforms.filter((t) => t.type !== "normalize");
-                } else {
-                  newTransforms = currentTransforms;
-                }
-                
-                onTransformationsChange(newTransforms);
-              }}
-            />
-            <Label htmlFor="normalize-transform">Normalize Text</Label>
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="filter-transform"
-              checked={transformations?.some((t) => t.type === "filter") || false}
-              onCheckedChange={(checked) => {
-                const currentTransforms = transformations || [];
-                const hasFilter = currentTransforms.some((t) => t.type === "filter");
-                
-                let newTransforms;
-                if (checked && !hasFilter) {
-                  newTransforms = [...currentTransforms, { type: "filter" }];
-                } else if (!checked && hasFilter) {
-                  newTransforms = currentTransforms.filter((t) => t.type !== "filter");
-                } else {
-                  newTransforms = currentTransforms;
-                }
-                
-                onTransformationsChange(newTransforms);
-              }}
-            />
-            <Label htmlFor="filter-transform">Filter Data</Label>
-          </div>
-          
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="augment-transform"
-              checked={transformations?.some((t) => t.type === "augment") || false}
-              onCheckedChange={(checked) => {
-                const currentTransforms = transformations || [];
-                const hasAugment = currentTransforms.some((t) => t.type === "augment");
-                
-                let newTransforms;
-                if (checked && !hasAugment) {
-                  newTransforms = [...currentTransforms, { type: "augment" }];
-                } else if (!checked && hasAugment) {
-                  newTransforms = currentTransforms.filter((t) => t.type !== "augment");
-                } else {
-                  newTransforms = currentTransforms;
-                }
-                
-                onTransformationsChange(newTransforms);
-              }}
-            />
-            <Label htmlFor="augment-transform">Augment Data</Label>
-          </div>
-        </div>
-      </div>
     </>
   );
 };
