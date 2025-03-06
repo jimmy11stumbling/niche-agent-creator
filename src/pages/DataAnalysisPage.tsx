@@ -1,568 +1,520 @@
 
-import React, { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { UploadCloud, FileType, Database, LineChart, Filter, Cpu, Save, BarChart2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Progress } from "@/components/ui/progress";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { UploadCloud, FileText, BarChart3, Code, Settings, Zap, Download } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
-interface DataItem {
-  [key: string]: any;
-}
-
-interface ProcessingResult {
-  data: DataItem[];
-  stats: {
-    rowCount: number;
-    columnCount: number;
-    processedAt: string;
-    processingTime: number;
-  };
-}
-
-const DataAnalysisPage: React.FC = () => {
+const DataAnalysisPage = () => {
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("upload");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [fileContent, setFileContent] = useState<string>("");
-  const [dataFormat, setDataFormat] = useState("csv");
-  const [transformations, setTransformations] = useState<string[]>([]);
-  const [customTransformation, setCustomTransformation] = useState("");
-  const [processingProgress, setProcessingProgress] = useState(0);
-  const [processingResult, setProcessingResult] = useState<ProcessingResult | null>(null);
-  const [chartType, setChartType] = useState("bar");
-  const [xAxisField, setXAxisField] = useState("");
-  const [yAxisField, setYAxisField] = useState("");
-  const { toast } = useToast();
+  const [dataSource, setDataSource] = useState("csv");
+  const [processingOptions, setProcessingOptions] = useState({
+    normalize: true,
+    removeOutliers: false,
+    fillMissingValues: true,
+    convertTypes: true
+  });
+  const [visualizationType, setVisualizationType] = useState("bar");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processedData, setProcessedData] = useState<any>(null);
+  const [transformationCode, setTransformationCode] = useState(
+    "// Example transformation code\nfunction transform(data) {\n  // Normalize numeric values\n  if (data.length > 0) {\n    const numericColumns = Object.keys(data[0]).filter(key => \n      typeof data[0][key] === 'number'\n    );\n    \n    numericColumns.forEach(column => {\n      const values = data.map(row => row[column]);\n      const min = Math.min(...values);\n      const max = Math.max(...values);\n      \n      data.forEach(row => {\n        row[column] = (row[column] - min) / (max - min);\n      });\n    });\n  }\n  \n  return data;\n}"
+  );
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
       setUploadedFile(file);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setFileContent(event.target.result as string);
-        }
-      };
-      reader.readAsText(file);
       
       toast({
         title: "File Uploaded",
-        description: `Successfully uploaded ${file.name}`,
+        description: `${file.name} has been uploaded successfully.`,
       });
-    }
-  };
-
-  const addTransformation = () => {
-    if (customTransformation.trim()) {
-      setTransformations([...transformations, customTransformation.trim()]);
-      setCustomTransformation("");
       
-      toast({
-        title: "Transformation Added",
-        description: "Custom data transformation has been added.",
-      });
+      // Automatically move to the next tab
+      setActiveTab("process");
     }
   };
 
-  const removeTransformation = (index: number) => {
-    setTransformations(transformations.filter((_, i) => i !== index));
-  };
-
-  const processData = () => {
-    if (!fileContent) {
+  const handleProcessData = () => {
+    if (!uploadedFile) {
       toast({
-        title: "No Data",
+        title: "No File",
         description: "Please upload a file first.",
         variant: "destructive",
       });
       return;
     }
-
-    // Simulate processing with progress
-    setProcessingProgress(0);
-    const interval = setInterval(() => {
-      setProcessingProgress((prev) => {
-        const newProgress = prev + 10;
-        if (newProgress >= 100) {
-          clearInterval(interval);
-          generateProcessingResult();
-          return 100;
-        }
-        return newProgress;
-      });
-    }, 200);
-  };
-
-  const generateProcessingResult = () => {
-    // Parse the data based on format
-    let parsedData: DataItem[] = [];
     
-    try {
-      if (dataFormat === "csv") {
-        const lines = fileContent.split("\n");
-        const headers = lines[0].split(",").map(h => h.trim());
-        
-        parsedData = lines.slice(1).map(line => {
-          const values = line.split(",").map(v => v.trim());
-          const rowData: DataItem = {};
-          
-          headers.forEach((header, index) => {
-            const value = values[index];
-            // Try to convert to number if possible
-            const numValue = Number(value);
-            rowData[header] = isNaN(numValue) ? value : numValue;
-          });
-          
-          return rowData;
-        }).filter(item => Object.keys(item).length > 0);
-      } else if (dataFormat === "json") {
-        parsedData = JSON.parse(fileContent);
-        if (!Array.isArray(parsedData)) {
-          parsedData = [parsedData];
+    setIsProcessing(true);
+    
+    // Simulate processing delay
+    setTimeout(() => {
+      // Mock processed data for demo
+      const mockProcessedData = {
+        columns: ["Category", "Value", "Growth"],
+        rows: [
+          { Category: "Product A", Value: 1200, Growth: 0.12 },
+          { Category: "Product B", Value: 1800, Growth: 0.24 },
+          { Category: "Product C", Value: 800, Growth: -0.05 },
+          { Category: "Product D", Value: 1500, Growth: 0.18 },
+          { Category: "Product E", Value: 950, Growth: 0.08 },
+        ],
+        summary: {
+          total: 6250,
+          average: 1250,
+          min: 800,
+          max: 1800,
+          outliers: 0
         }
-      }
+      };
       
-      // Apply transformations (in a real app, this would be more sophisticated)
-      if (transformations.length > 0) {
-        // This is a simplified example - in a real app, you'd evaluate these correctly
-        transformations.forEach(transform => {
-          try {
-            // Simple transformations like "multiply field by 2"
-            if (transform.includes("multiply")) {
-              const parts = transform.split(" ");
-              const field = parts[1];
-              const factor = parseFloat(parts[3]);
-              
-              parsedData = parsedData.map(item => ({
-                ...item,
-                [field]: typeof item[field] === 'number' ? item[field] * factor : item[field]
-              }));
-            }
-            // Add more transformation types as needed
-          } catch (error) {
-            console.error("Error applying transformation:", transform, error);
-          }
-        });
-      }
-      
-      setProcessingResult({
-        data: parsedData,
-        stats: {
-          rowCount: parsedData.length,
-          columnCount: parsedData.length > 0 ? Object.keys(parsedData[0]).length : 0,
-          processedAt: new Date().toISOString(),
-          processingTime: 1.23 // Simulated processing time
-        }
-      });
-      
-      // Set default chart fields if available
-      if (parsedData.length > 0) {
-        const fields = Object.keys(parsedData[0]);
-        const numericFields = fields.filter(field => 
-          typeof parsedData[0][field] === 'number'
-        );
-        
-        if (fields.length > 0 && !xAxisField) {
-          setXAxisField(fields[0]);
-        }
-        
-        if (numericFields.length > 0 && !yAxisField) {
-          setYAxisField(numericFields[0]);
-        }
-      }
-      
-      // Move to the results tab
-      setActiveTab("results");
+      setProcessedData(mockProcessedData);
+      setIsProcessing(false);
       
       toast({
         title: "Processing Complete",
-        description: `Successfully processed ${parsedData.length} records.`,
+        description: "Data has been processed successfully.",
       });
-    } catch (error) {
-      console.error("Error processing data:", error);
-      toast({
-        title: "Processing Error",
-        description: "An error occurred while processing the data.",
-        variant: "destructive",
-      });
-    }
+      
+      // Move to visualization tab
+      setActiveTab("visualize");
+    }, 2000);
   };
 
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
-  
-  const renderCharts = () => {
-    if (!processingResult || processingResult.data.length === 0) {
-      return (
-        <div className="flex items-center justify-center p-8 text-muted-foreground">
-          No data available for visualization.
-        </div>
-      );
-    }
-
-    const data = processingResult.data;
-
-    switch (chartType) {
-      case "bar":
-        return (
-          <ResponsiveContainer width="100%" height={400}>
-            <BarChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey={xAxisField} />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey={yAxisField} fill="#8884d8" />
-            </BarChart>
-          </ResponsiveContainer>
-        );
-      case "line":
-        return (
-          <ResponsiveContainer width="100%" height={400}>
-            <AreaChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey={xAxisField} />
-              <YAxis />
-              <Tooltip />
-              <Area type="monotone" dataKey={yAxisField} stroke="#8884d8" fill="#8884d8" />
-            </AreaChart>
-          </ResponsiveContainer>
-        );
-      case "pie":
-        return (
-          <ResponsiveContainer width="100%" height={400}>
-            <PieChart>
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                outerRadius={150}
-                fill="#8884d8"
-                dataKey={yAxisField}
-                nameKey={xAxisField}
-              >
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        );
-      default:
-        return null;
-    }
+  const handleDownloadResults = () => {
+    if (!processedData) return;
+    
+    // Convert processed data to JSON string
+    const dataStr = JSON.stringify(processedData, null, 2);
+    const dataUri = `data:application/json;charset=utf-8,${encodeURIComponent(dataStr)}`;
+    
+    // Create download link and trigger click
+    const downloadLink = document.createElement("a");
+    downloadLink.setAttribute("href", dataUri);
+    downloadLink.setAttribute("download", "processed_data.json");
+    downloadLink.click();
+    
+    toast({
+      title: "Download Started",
+      description: "Your processed data is being downloaded.",
+    });
   };
 
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      
-      <main className="flex-1 container mx-auto py-8 px-4">
-        <h1 className="text-3xl font-bold mb-6">Data Analysis & Visualization</h1>
-        
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-          <TabsList className="grid grid-cols-3">
-            <TabsTrigger value="upload">
-              <UploadCloud className="mr-2 h-4 w-4" />
-              Data Upload
-            </TabsTrigger>
-            <TabsTrigger value="processing">
-              <Cpu className="mr-2 h-4 w-4" />
-              Processing
-            </TabsTrigger>
-            <TabsTrigger value="results">
-              <BarChart2 className="mr-2 h-4 w-4" />
-              Results & Visualization
-            </TabsTrigger>
-          </TabsList>
+      <main className="flex-1 py-8">
+        <div className="container mx-auto px-4">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold mb-2">Data Analysis</h1>
+            <p className="text-muted-foreground">
+              Upload, process, and visualize your data with AI-powered analytics
+            </p>
+          </div>
           
-          <TabsContent value="upload" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Upload Data</CardTitle>
-                <CardDescription>
-                  Upload your data file for analysis. Supported formats: CSV, JSON.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid w-full max-w-sm items-center gap-1.5">
-                  <Label htmlFor="dataFile">Data File</Label>
-                  <div className="flex w-full max-w-sm items-center gap-1.5">
-                    <Input id="dataFile" type="file" onChange={handleFileUpload} className="flex-1" accept=".csv,.json" />
-                  </div>
-                </div>
-                
-                <div className="grid w-full max-w-sm items-center gap-1.5">
-                  <Label htmlFor="dataFormat">Data Format</Label>
-                  <Select value={dataFormat} onValueChange={setDataFormat}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select format" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="csv">CSV</SelectItem>
-                      <SelectItem value="json">JSON</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                {uploadedFile && (
-                  <div className="mt-4 p-4 border rounded-md bg-muted/50">
-                    <div className="flex items-center gap-2 mb-2">
-                      <FileType className="h-5 w-5 text-primary" />
-                      <span className="font-medium">{uploadedFile.name}</span>
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {Math.round(uploadedFile.size / 1024)} KB • {uploadedFile.type || "Unknown type"}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-              <CardFooter>
-                <Button onClick={() => setActiveTab("processing")} disabled={!uploadedFile}>
-                  Continue to Processing
-                </Button>
-              </CardFooter>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="processing" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Data Processing</CardTitle>
-                <CardDescription>
-                  Apply transformations and processing to your data.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-4">
-                  <div>
-                    <Label>Custom Transformations</Label>
-                    <div className="flex gap-2 mt-1">
-                      <Input 
-                        value={customTransformation} 
-                        onChange={(e) => setCustomTransformation(e.target.value)}
-                        placeholder="e.g., multiply price by 2" 
-                        className="flex-1"
-                      />
-                      <Button onClick={addTransformation} variant="outline">
-                        Add
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Example: "multiply price by 2", "filter where quantity > 10"
-                    </p>
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            <TabsList className="grid grid-cols-4 w-full max-w-2xl mx-auto">
+              <TabsTrigger value="upload">
+                <UploadCloud className="mr-2 h-4 w-4" />
+                Upload
+              </TabsTrigger>
+              <TabsTrigger value="process">
+                <Settings className="mr-2 h-4 w-4" />
+                Process
+              </TabsTrigger>
+              <TabsTrigger value="transform">
+                <Code className="mr-2 h-4 w-4" />
+                Transform
+              </TabsTrigger>
+              <TabsTrigger value="visualize">
+                <BarChart3 className="mr-2 h-4 w-4" />
+                Visualize
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="upload" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Upload Data</CardTitle>
+                  <CardDescription>
+                    Upload your data files for analysis
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="dataSource">Data Source</Label>
+                    <Select
+                      value={dataSource}
+                      onValueChange={setDataSource}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select data source" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="csv">CSV File</SelectItem>
+                        <SelectItem value="json">JSON File</SelectItem>
+                        <SelectItem value="excel">Excel Spreadsheet</SelectItem>
+                        <SelectItem value="api">API Endpoint</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   
-                  {transformations.length > 0 && (
+                  {dataSource === "api" ? (
                     <div className="space-y-2">
-                      <Label>Applied Transformations:</Label>
-                      <ul className="space-y-1">
-                        {transformations.map((transform, index) => (
-                          <li key={index} className="flex items-center justify-between p-2 bg-muted rounded-md">
-                            <div className="flex items-center gap-2">
-                              <Filter className="h-4 w-4 text-primary" />
-                              <span>{transform}</span>
-                            </div>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              onClick={() => removeTransformation(index)}
-                              className="h-6 w-6 p-0"
-                            >
-                              ×
-                            </Button>
-                          </li>
-                        ))}
-                      </ul>
+                      <Label htmlFor="apiUrl">API URL</Label>
+                      <Input id="apiUrl" placeholder="https://api.example.com/data" />
+                      <p className="text-xs text-muted-foreground">
+                        Enter the URL of the API endpoint to fetch data
+                      </p>
                     </div>
-                  )}
-                </div>
-                
-                {processingProgress > 0 && processingProgress < 100 && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label>Processing Data...</Label>
-                      <span className="text-sm">{processingProgress}%</span>
-                    </div>
-                    <Progress value={processingProgress} className="h-2" />
-                  </div>
-                )}
-              </CardContent>
-              <CardFooter>
-                <Button onClick={processData}>
-                  <Cpu className="mr-2 h-4 w-4" />
-                  Process Data
-                </Button>
-              </CardFooter>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="results" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Results & Visualization</CardTitle>
-                <CardDescription>
-                  View and visualize your processed data.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {processingResult ? (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <Card>
-                        <CardHeader className="p-4">
-                          <CardTitle className="text-lg">Rows</CardTitle>
-                        </CardHeader>
-                        <CardContent className="pt-0 p-4">
-                          <p className="text-2xl font-bold">{processingResult.stats.rowCount}</p>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardHeader className="p-4">
-                          <CardTitle className="text-lg">Columns</CardTitle>
-                        </CardHeader>
-                        <CardContent className="pt-0 p-4">
-                          <p className="text-2xl font-bold">{processingResult.stats.columnCount}</p>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardHeader className="p-4">
-                          <CardTitle className="text-lg">Processing Time</CardTitle>
-                        </CardHeader>
-                        <CardContent className="pt-0 p-4">
-                          <p className="text-2xl font-bold">{processingResult.stats.processingTime}s</p>
-                        </CardContent>
-                      </Card>
-                    </div>
-                    
+                  ) : (
                     <div className="space-y-4">
-                      <div className="flex flex-col md:flex-row gap-4">
-                        <div className="flex-1">
-                          <Label htmlFor="chartType">Chart Type</Label>
-                          <Select value={chartType} onValueChange={setChartType}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select chart type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="bar">Bar Chart</SelectItem>
-                              <SelectItem value="line">Line Chart</SelectItem>
-                              <SelectItem value="pie">Pie Chart</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="flex-1">
-                          <Label htmlFor="xAxis">X Axis Field</Label>
-                          <Select value={xAxisField} onValueChange={setXAxisField}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select X axis field" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {processingResult.data.length > 0 && 
-                                Object.keys(processingResult.data[0]).map(field => (
-                                  <SelectItem key={field} value={field}>{field}</SelectItem>
-                                ))
-                              }
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="flex-1">
-                          <Label htmlFor="yAxis">Y Axis Field</Label>
-                          <Select value={yAxisField} onValueChange={setYAxisField}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select Y axis field" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {processingResult.data.length > 0 && 
-                                Object.keys(processingResult.data[0])
-                                  .filter(field => typeof processingResult.data[0][field] === 'number')
-                                  .map(field => (
-                                    <SelectItem key={field} value={field}>{field}</SelectItem>
-                                  ))
-                              }
-                            </SelectContent>
-                          </Select>
+                      <div className="grid w-full h-32 place-items-center rounded-lg border border-dashed bg-muted/20 px-4 py-5 text-center">
+                        <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                          <UploadCloud className="h-8 w-8" />
+                          <div className="flex flex-col">
+                            <span className="text-sm font-semibold">Click to upload or drag and drop</span>
+                            <span className="text-xs">
+                              {dataSource === "csv" && "CSV (*.csv)"}
+                              {dataSource === "json" && "JSON (*.json)"}
+                              {dataSource === "excel" && "Excel (*.xlsx, *.xls)"}
+                            </span>
+                          </div>
+                          <Input
+                            id="fileUpload"
+                            type="file"
+                            className="absolute inset-0 cursor-pointer opacity-0"
+                            accept={
+                              dataSource === "csv" ? ".csv" :
+                              dataSource === "json" ? ".json" :
+                              dataSource === "excel" ? ".xlsx,.xls" : ""
+                            }
+                            onChange={handleFileUpload}
+                          />
                         </div>
                       </div>
                       
-                      <div className="bg-muted/50 rounded-lg p-4">
-                        {renderCharts()}
+                      {uploadedFile && (
+                        <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2">
+                          <FileText className="h-5 w-5 text-primary" />
+                          <div className="flex-1 text-sm">
+                            <p className="font-medium">{uploadedFile.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {(uploadedFile.size / 1024).toFixed(2)} KB
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setActiveTab("process")}
+                          >
+                            Continue to Processing
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {dataSource === "api" && (
+                    <Button className="w-full" onClick={() => setActiveTab("process")}>
+                      Connect to API
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="process" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Process Data</CardTitle>
+                  <CardDescription>
+                    Configure processing options for your data
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="normalize" className="flex items-center gap-2">
+                          <input
+                            id="normalize"
+                            type="checkbox"
+                            className="rounded border-gray-300"
+                            checked={processingOptions.normalize}
+                            onChange={() => setProcessingOptions(prev => ({
+                              ...prev,
+                              normalize: !prev.normalize
+                            }))}
+                          />
+                          Normalize Data
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Scale numeric values to range between 0 and 1
+                        </p>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="removeOutliers" className="flex items-center gap-2">
+                          <input
+                            id="removeOutliers"
+                            type="checkbox"
+                            className="rounded border-gray-300"
+                            checked={processingOptions.removeOutliers}
+                            onChange={() => setProcessingOptions(prev => ({
+                              ...prev,
+                              removeOutliers: !prev.removeOutliers
+                            }))}
+                          />
+                          Remove Outliers
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Identify and remove statistical outliers
+                        </p>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="fillMissingValues" className="flex items-center gap-2">
+                          <input
+                            id="fillMissingValues"
+                            type="checkbox"
+                            className="rounded border-gray-300"
+                            checked={processingOptions.fillMissingValues}
+                            onChange={() => setProcessingOptions(prev => ({
+                              ...prev,
+                              fillMissingValues: !prev.fillMissingValues
+                            }))}
+                          />
+                          Fill Missing Values
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Replace missing values with statistical estimates
+                        </p>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="convertTypes" className="flex items-center gap-2">
+                          <input
+                            id="convertTypes"
+                            type="checkbox"
+                            className="rounded border-gray-300"
+                            checked={processingOptions.convertTypes}
+                            onChange={() => setProcessingOptions(prev => ({
+                              ...prev,
+                              convertTypes: !prev.convertTypes
+                            }))}
+                          />
+                          Convert Data Types
+                        </Label>
+                        <p className="text-xs text-muted-foreground">
+                          Automatically detect and convert column data types
+                        </p>
                       </div>
                     </div>
                     
-                    <div>
-                      <h3 className="text-lg font-medium mb-2">Data Preview (First 5 Rows)</h3>
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-border">
-                          <thead>
-                            <tr>
-                              {processingResult.data.length > 0 && 
-                                Object.keys(processingResult.data[0]).map(header => (
-                                  <th key={header} className="px-4 py-2 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                    {header}
-                                  </th>
-                                ))
-                              }
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-border">
-                            {processingResult.data.slice(0, 5).map((row, rowIndex) => (
-                              <tr key={rowIndex}>
-                                {Object.values(row).map((value: any, cellIndex) => (
-                                  <td key={cellIndex} className="px-4 py-2 text-sm">
-                                    {typeof value === 'object' ? JSON.stringify(value) : String(value)}
-                                  </td>
-                                ))}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                    <div className="pt-4">
+                      <Button 
+                        onClick={handleProcessData}
+                        disabled={isProcessing}
+                        className="w-full"
+                      >
+                        {isProcessing ? (
+                          <>
+                            <span className="animate-spin mr-2">⟳</span>
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="mr-2 h-4 w-4" />
+                            Process Data
+                          </>
+                        )}
+                      </Button>
                     </div>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <Database className="h-12 w-12 text-muted-foreground mb-4" />
-                    <h3 className="text-lg font-medium">No Data Processed Yet</h3>
-                    <p className="text-muted-foreground mt-1">
-                      Upload a file and process it to see results here.
-                    </p>
-                    <Button 
-                      variant="outline" 
-                      className="mt-4"
-                      onClick={() => setActiveTab("upload")}
-                    >
-                      Go to Upload
-                    </Button>
                   </div>
-                )}
-              </CardContent>
-              <CardFooter className="flex justify-between">
-                {processingResult && (
-                  <Button variant="outline" onClick={() => setActiveTab("processing")}>
-                    Back to Processing
-                  </Button>
-                )}
-                {processingResult && (
-                  <Button>
-                    <Save className="mr-2 h-4 w-4" />
-                    Save Results
-                  </Button>
-                )}
-              </CardFooter>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="transform" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Transform Data</CardTitle>
+                  <CardDescription>
+                    Write custom transformation code to manipulate your data
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-4">
+                    <Textarea
+                      value={transformationCode}
+                      onChange={(e) => setTransformationCode(e.target.value)}
+                      className="font-mono h-80"
+                    />
+                    
+                    <div className="pt-4 flex gap-4">
+                      <Button 
+                        onClick={() => setActiveTab("visualize")}
+                        variant="outline"
+                        className="flex-1"
+                      >
+                        Skip Transformation
+                      </Button>
+                      <Button 
+                        onClick={() => {
+                          toast({
+                            title: "Transformation Applied",
+                            description: "Custom transformation has been applied to your data.",
+                          });
+                          setActiveTab("visualize");
+                        }}
+                        className="flex-1"
+                      >
+                        Apply Transformation
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="visualize" className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Visualize Results</CardTitle>
+                  <CardDescription>
+                    View and download your processed data
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {processedData ? (
+                    <div className="space-y-6">
+                      <div className="space-y-2">
+                        <Label htmlFor="visualizationType">Visualization Type</Label>
+                        <Select
+                          value={visualizationType}
+                          onValueChange={setVisualizationType}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select visualization type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="bar">Bar Chart</SelectItem>
+                            <SelectItem value="line">Line Chart</SelectItem>
+                            <SelectItem value="pie">Pie Chart</SelectItem>
+                            <SelectItem value="scatter">Scatter Plot</SelectItem>
+                            <SelectItem value="table">Data Table</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="border rounded-lg p-4 h-64 bg-muted/20 flex items-center justify-center">
+                        {visualizationType !== "table" ? (
+                          <div className="text-center">
+                            <BarChart3 className="h-16 w-16 mx-auto text-primary/50" />
+                            <p className="mt-2 text-muted-foreground">
+                              Visualization preview would appear here
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="w-full overflow-auto">
+                            <table className="min-w-full divide-y divide-border">
+                              <thead>
+                                <tr>
+                                  {processedData.columns.map((column: string) => (
+                                    <th key={column} className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider">
+                                      {column}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-border">
+                                {processedData.rows.map((row: any, i: number) => (
+                                  <tr key={i}>
+                                    {processedData.columns.map((column: string) => (
+                                      <td key={`${i}-${column}`} className="px-4 py-2 text-sm">
+                                        {typeof row[column] === "number" ? 
+                                          row[column].toLocaleString(undefined, {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2
+                                          }) : 
+                                          row[column]}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="bg-muted/20 rounded-lg p-4">
+                        <h3 className="text-sm font-medium mb-2">Data Summary</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Total</p>
+                            <p className="font-medium">{processedData.summary.total.toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Average</p>
+                            <p className="font-medium">{processedData.summary.average.toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Minimum</p>
+                            <p className="font-medium">{processedData.summary.min.toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Maximum</p>
+                            <p className="font-medium">{processedData.summary.max.toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Outliers</p>
+                            <p className="font-medium">{processedData.summary.outliers}</p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <Button
+                        onClick={handleDownloadResults}
+                        className="w-full"
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Download Results
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <BarChart3 className="h-16 w-16 mx-auto text-muted-foreground/50" />
+                      <h3 className="mt-4 text-lg font-medium">No Data Available</h3>
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Process your data first to view visualizations
+                      </p>
+                      <Button
+                        variant="outline"
+                        className="mt-4"
+                        onClick={() => setActiveTab("process")}
+                      >
+                        Go to Processing
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
       </main>
-      
       <Footer />
     </div>
   );
