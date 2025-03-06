@@ -27,6 +27,8 @@ import ScriptExecutionSettings from "./task-components/ScriptExecutionSettings";
 import DataProcessingSettings from "./task-components/DataProcessingSettings";
 import ConditionSettings from "./task-components/ConditionSettings";
 import TriggerSettings from "./task-components/TriggerSettings";
+import WebCrawlingSettings from "./task-components/WebCrawlingSettings";
+import AICompletionSettings from "./task-components/AICompletionSettings";
 
 interface TaskDialogProps {
   task: Task | null;
@@ -149,6 +151,48 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
                 onValidationChange={(checked) => updateTask("parameters.validation", checked)}
                 onValidationRulesChange={(value) => updateTask("parameters.validationRules", value)}
                 onTransformationsChange={(transforms) => updateTask("parameters.transformations", transforms)}
+              />
+            )}
+          
+          {/* Web Crawling parameters */}
+          {task.type === "Action" &&
+            task.actionType === "WebCrawling" && (
+              <WebCrawlingSettings 
+                url={getTaskParameter("url", "https://example.com")}
+                depth={getTaskParameter("depth", 2)}
+                followLinks={getTaskParameter("followLinks", false)}
+                maxPages={getTaskParameter("maxPages", 10)}
+                excludePatterns={getTaskParameter("excludePatterns", "")}
+                outputFormat={getTaskParameter("outputFormat", "json")}
+                extractRules={getTaskParameter("extractRules", "")}
+                onUrlChange={(value) => updateTask("parameters.url", value)}
+                onDepthChange={(value) => updateTask("parameters.depth", value)}
+                onFollowLinksChange={(value) => updateTask("parameters.followLinks", value)}
+                onMaxPagesChange={(value) => updateTask("parameters.maxPages", value)}
+                onExcludePatternsChange={(value) => updateTask("parameters.excludePatterns", value)}
+                onOutputFormatChange={(value) => updateTask("parameters.outputFormat", value)}
+                onExtractRulesChange={(value) => updateTask("parameters.extractRules", value)}
+              />
+            )}
+            
+          {/* AI Completion parameters */}
+          {task.type === "Action" &&
+            task.actionType === "AICompletion" && (
+              <AICompletionSettings 
+                model={getTaskParameter("model", "gpt-4-turbo")}
+                prompt={getTaskParameter("prompt", "")}
+                temperature={getTaskParameter("temperature", 0.7)}
+                maxTokens={getTaskParameter("maxTokens", 1000)}
+                topP={getTaskParameter("topP", 1)}
+                frequencyPenalty={getTaskParameter("frequencyPenalty", 0)}
+                presencePenalty={getTaskParameter("presencePenalty", 0)}
+                onModelChange={(value) => updateTask("parameters.model", value)}
+                onPromptChange={(value) => updateTask("parameters.prompt", value)}
+                onTemperatureChange={(value) => updateTask("parameters.temperature", value)}
+                onMaxTokensChange={(value) => updateTask("parameters.maxTokens", value)}
+                onTopPChange={(value) => updateTask("parameters.topP", value)}
+                onFrequencyPenaltyChange={(value) => updateTask("parameters.frequencyPenalty", value)}
+                onPresencePenaltyChange={(value) => updateTask("parameters.presencePenalty", value)}
               />
             )}
           
