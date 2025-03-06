@@ -1,4 +1,3 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -95,55 +94,56 @@
   }
 }
 
+.gradient-text {
+  background: linear-gradient(90deg, theme('colors.primary.DEFAULT'), theme('colors.primary.600'));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-fill-color: transparent;
+  display: inline-block;
+}
+
 .glass-card {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.03);
   backdrop-filter: blur(10px);
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   transition: all 0.3s ease;
 }
 
 .glass-card:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.05);
   transform: translateY(-5px);
-  box-shadow: 0 8px 32px rgba(31, 38, 135, 0.15);
 }
 
 .slide-in {
-  animation: slideIn 0.5s ease-out forwards;
-}
-
-@keyframes slideIn {
-  0% {
-    transform: translateY(20px);
-    opacity: 0;
-  }
-  100% {
-    transform: translateY(0);
-    opacity: 1;
-  }
+  animation: slideIn 0.3s ease forwards;
 }
 
 .fade-in {
-  animation: fadeIn 0.5s ease-out forwards;
+  animation: fadeIn 0.3s ease forwards;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes fadeIn {
-  0% {
+  from {
     opacity: 0;
   }
-  100% {
+  to {
     opacity: 1;
   }
 }
 
 .gradient-bg {
   background: linear-gradient(120deg, #f0f4ff 0%, #e6f0ff 100%);
-}
-
-.gradient-text {
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
-  background-image: linear-gradient(135deg, #2563eb, #4f46e5);
 }

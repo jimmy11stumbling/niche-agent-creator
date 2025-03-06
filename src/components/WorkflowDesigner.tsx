@@ -10,7 +10,6 @@ import ValidationDialog from "./workflow/dialogs/ValidationDialog";
 import SaveDialog from "./workflow/dialogs/SaveDialog";
 import WorkflowCanvas from "./workflow/components/WorkflowCanvas";
 import WorkflowToolbar from "./workflow/components/WorkflowToolbar";
-import { ACTION_TYPE_PARAMS } from "./workflow/constants";
 
 interface WorkflowDesignerProps {
   workflowId?: string;
@@ -59,7 +58,9 @@ const WorkflowDesigner: React.FC<WorkflowDesignerProps> = ({ workflowId }) => {
     handleSaveTransitionChanges,
     handleNewWorkflow,
     handleDuplicateWorkflow,
-    updateTaskBeingEdited
+    updateTaskBeingEdited,
+    setTaskBeingEdited,
+    setTransitionBeingEdited
   } = useWorkflowEditor(workflowId);
 
   const { sourceTaskName, targetTaskName } = getTransitionTaskNames();
