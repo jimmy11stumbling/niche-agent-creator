@@ -42,6 +42,8 @@ function App() {
         <Route path="/workflows" element={<WorkflowDashboardPage />} />
         <Route path="/workflow-designer" element={<WorkflowDesignerPage />} />
         <Route path="/workflow-designer/:workflowId" element={<WorkflowDesignerPage />} />
+        {/* Add redirect for the old route causing 404 errors */}
+        <Route path="/workflows/designer" element={<Navigate to="/workflow-designer" replace />} />
         <Route path="/deploy/:agentId" element={<DeploymentPage />} />
         <Route path="/data-analysis" element={<DataAnalysisPage />} />
         <Route path="*" element={<NotFound />} />

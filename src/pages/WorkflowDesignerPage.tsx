@@ -1,17 +1,53 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import WorkflowDesigner from "@/components/WorkflowDesigner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { InfoIcon, FileTextIcon, DatabaseIcon, ArrowRightIcon } from "lucide-react";
+import { InfoIcon, FileTextIcon, DatabaseIcon, ArrowRightIcon, AlertCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
 
 const WorkflowDesignerPage = () => {
   const { workflowId } = useParams<{ workflowId: string }>();
   const [activeTab, setActiveTab] = useState("designer");
+  const [isLoading, setIsLoading] = useState(!!workflowId);
+  const [error, setError] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  
+  useEffect(() => {
+    // If workflowId is provided, verify it exists
+    if (workflowId) {
+      setIsLoading(true);
+      try {
+        // Check if the workflow exists in localStorage
+        const savedWorkflows = JSON.parse(localStorage.getItem("workflows") || "[]");
+        const workflowExists = savedWorkflows.some((w: any) => w.id === workflowId);
+        
+        if (!workflowExists) {
+          setError(`Workflow with ID "${workflowId}" not found`);
+          toast({
+            title: "Workflow Not Found",
+            description: `The workflow you're trying to access doesn't exist. Redirecting to designer.`,
+            variant: "destructive",
+          });
+          
+          // Redirect to the designer without ID after a short delay
+          setTimeout(() => {
+            navigate("/workflow-designer");
+          }, 2000);
+        }
+      } catch (err) {
+        console.error("Error fetching workflow:", err);
+        setError("Failed to load workflow data");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  }, [workflowId, navigate, toast]);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -26,7 +62,15 @@ const WorkflowDesignerPage = () => {
             </AlertDescription>
           </Alert>
 
-          {!workflowId && (
+          {error && (
+            <Alert variant="destructive" className="mt-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {!workflowId && !error && (
             <div className="mt-8 mb-4">
               <h2 className="text-2xl font-bold mb-4">Getting Started</h2>
               
@@ -98,7 +142,14 @@ const WorkflowDesignerPage = () => {
           </TabsList>
           
           <TabsContent value="designer">
-            <WorkflowDesigner workflowId={workflowId} />
+            {isLoading ? (
+              <div className="flex justify-center items-center py-20">
+                <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full"></div>
+                <span className="ml-3">Loading workflow...</span>
+              </div>
+            ) : (
+              <WorkflowDesigner workflowId={error ? undefined : workflowId} />
+            )}
           </TabsContent>
           
           <TabsContent value="documentation">

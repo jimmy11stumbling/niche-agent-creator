@@ -1,4 +1,7 @@
+
 import { Task } from "@/types/workflow";
+import { applyTransformations } from "./processing/transformations";
+import { formatData } from "./processing/formatters";
 
 // Memoization cache for processed results
 const processingCache = new Map<string, any>();
@@ -69,10 +72,10 @@ export const processData = async (task: Task, inputData: any) => {
     // Store in cache
     processingCache.set(cacheKey, result);
     
-    // Limit cache size
-    if (processingCache.size > 50) {
-      const firstKey = processingCache.keys().next().value;
-      processingCache.delete(firstKey);
+    // Limit cache size to prevent memory leaks
+    if (processingCache.size > 100) {
+      const oldestKey = processingCache.keys().next().value;
+      processingCache.delete(oldestKey);
     }
     
     return result;
@@ -104,169 +107,95 @@ const validateInputData = (inputData: any): any => {
   }
 };
 
-// Apply transformations to data with better error handling
-const applyTransformations = (data: any, transformations: any[]): any => {
-  if (!Array.isArray(transformations) || transformations.length === 0) {
-    return data;
-  }
-  
-  let processedData = { ...data };
-  
-  try {
-    transformations.forEach(transform => {
-      if (!transform || !transform.type) {
-        console.warn("Invalid transformation object:", transform);
-        return;
-      }
-      
-      console.log(`Applying transformation: ${transform.type}`);
-      
-      switch (transform.type) {
-        case "normalize":
-          processedData = normalizeData(processedData, transform.config);
-          break;
-        case "filter":
-          processedData = filterData(processedData, transform.config);
-          break;
-        case "augment":
-          processedData = augmentData(processedData, transform.config);
-          break;
-        case "aggregate":
-          processedData = aggregateData(processedData, transform.config);
-          break;
-        case "sort":
-          processedData = sortData(processedData, transform.config);
-          break;
-        default:
-          console.warn(`Unknown transformation type: ${transform.type}`);
-      }
-    });
-    
-    return processedData;
-  } catch (error) {
-    console.error("Error applying transformations:", error);
-    return data; // Return original data on error
-  }
-};
-
-// Normalize data
-const normalizeData = (data: any, config?: any): any => {
-  // In a real application, this would implement data normalization logic
-  return { ...data, normalized: true };
-};
-
-// Filter data
-const filterData = (data: any, config?: any): any => {
-  // In a real application, this would filter the data based on conditions
-  return { ...data, filtered: true };
-};
-
-// Augment data
-const augmentData = (data: any, config?: any): any => {
-  // In a real application, this would add additional data or enrich existing data
-  return { ...data, augmented: true };
-};
-
-// Aggregate data
-const aggregateData = (data: any, config?: any): any => {
-  // In a real application, this would perform aggregation operations (sum, avg, etc)
-  return { ...data, aggregated: true };
-};
-
-// Sort data
-const sortData = (data: any, config?: any): any => {
-  // In a real application, this would sort data based on specified fields
-  return { ...data, sorted: true };
-};
-
 // Validate data against rules
 const validateData = (data: any, rules: any): any => {
   console.log("Validating data against rules");
-  // In a real app this would check data against defined rules
-  // For now, we just simulate the validation
-  return { ...data, validated: true };
-};
-
-// Format data for output with robust error handling
-const formatData = (data: any, outputFormat: string = 'json'): any => {
-  if (!outputFormat) {
-    return data;
-  }
   
   try {
-    console.log(`Formatting data to: ${outputFormat}`);
-    const format = outputFormat.toLowerCase();
+    let isValid = true;
+    const validationMessages: string[] = [];
     
-    switch (format) {
-      case "json":
-        return typeof data === 'string' ? data : JSON.stringify(data, null, 2);
-      case "csv":
-        return convertToCSV(data);
-      case "xml":
-        return convertToXML(data);
-      case "text":
-      case "txt":
-        return typeof data === 'string' ? data : JSON.stringify(data);
-      default:
-        console.warn(`Unsupported output format: ${format}, returning as-is`);
-        return data;
+    if (rules.schema) {
+      // Simple JSON Schema validation
+      const { required, properties } = rules.schema;
+      
+      // Check required fields
+      if (Array.isArray(required)) {
+        required.forEach(field => {
+          if (data[field] === undefined) {
+            isValid = false;
+            validationMessages.push(`Missing required field: ${field}`);
+          }
+        });
+      }
+      
+      // Check property types
+      if (properties && typeof properties === 'object') {
+        Object.entries(properties).forEach(([field, schema]: [string, any]) => {
+          if (data[field] !== undefined) {
+            const fieldType = schema.type;
+            const actualType = typeof data[field];
+            
+            // Type validation
+            if (fieldType && actualType !== fieldType && 
+                !(fieldType === 'number' && !isNaN(Number(data[field])))) {
+              isValid = false;
+              validationMessages.push(
+                `Field ${field} has wrong type: expected ${fieldType}, got ${actualType}`
+              );
+            }
+            
+            // String pattern validation
+            if (fieldType === 'string' && schema.pattern) {
+              const regex = new RegExp(schema.pattern);
+              if (!regex.test(data[field])) {
+                isValid = false;
+                validationMessages.push(
+                  `Field ${field} does not match pattern: ${schema.pattern}`
+                );
+              }
+            }
+            
+            // Number range validation
+            if (fieldType === 'number') {
+              const value = Number(data[field]);
+              if (schema.minimum !== undefined && value < schema.minimum) {
+                isValid = false;
+                validationMessages.push(
+                  `Field ${field} is less than minimum: ${schema.minimum}`
+                );
+              }
+              if (schema.maximum !== undefined && value > schema.maximum) {
+                isValid = false;
+                validationMessages.push(
+                  `Field ${field} is greater than maximum: ${schema.maximum}`
+                );
+              }
+            }
+          }
+        });
+      }
     }
+    
+    return {
+      ...data,
+      validated: true,
+      isValid,
+      validationMessages: validationMessages.length ? validationMessages : undefined
+    };
   } catch (error) {
-    console.error("Error formatting data:", error);
-    return typeof data === 'string' ? data : JSON.stringify(data);
+    console.error("Error validating data:", error);
+    return {
+      ...data,
+      validated: false,
+      isValid: false,
+      validationMessages: [`Validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`]
+    };
   }
 };
 
-// Helper to convert data to CSV format
-const convertToCSV = (data: any): string => {
-  // Simple CSV conversion simulation
-  if (Array.isArray(data)) {
-    try {
-      // Get headers
-      const headers = Object.keys(data[0] || {});
-      // Create CSV rows
-      const csvRows = [
-        headers.join(','),
-        ...data.map(row => 
-          headers.map(header => 
-            JSON.stringify(row[header] || '')
-          ).join(',')
-        )
-      ];
-      return csvRows.join('\n');
-    } catch (e) {
-      console.error("Error converting to CSV:", e);
-      return "data,in,csv,format";
-    }
-  }
-  return "data,in,csv,format";
-};
-
-// Helper to convert data to XML format
-const convertToXML = (data: any): string => {
-  // Simple XML conversion simulation
-  const toXML = (obj: any, rootName: string = 'root'): string => {
-    if (typeof obj !== 'object' || obj === null) {
-      return `<${rootName}>${obj}</${rootName}>`;
-    }
-    
-    if (Array.isArray(obj)) {
-      return `<${rootName}>${
-        obj.map(item => toXML(item, 'item')).join('')
-      }</${rootName}>`;
-    }
-    
-    return `<${rootName}>${
-      Object.entries(obj).map(([key, value]) => 
-        toXML(value, key)
-      ).join('')
-    }</${rootName}>`;
-  };
-  
-  try {
-    return toXML(data, 'data');
-  } catch (e) {
-    console.error("Error converting to XML:", e);
-    return "<data><error>Failed to convert to XML</error></data>";
-  }
+// Expose function to clear processing cache for testing or memory management
+export const clearProcessingCache = () => {
+  processingCache.clear();
+  console.log("Processing cache cleared");
 };
