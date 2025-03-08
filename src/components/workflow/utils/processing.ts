@@ -1,13 +1,15 @@
-
 import { Task } from "@/types/workflow";
 
-// Helper to find a task by ID
+// Memoization cache for processed results
+const processingCache = new Map<string, any>();
+
+// Helper to find a task by ID with error handling
 export const getTaskById = (tasks: Task[], id: string): Task | null => {
   if (!tasks || !Array.isArray(tasks) || !id) return null;
   return tasks.find((task) => task.id === id) || null;
 };
 
-// Process data according to task configuration
+// Process data according to task configuration with error handling and caching
 export const processData = async (task: Task, inputData: any) => {
   try {
     if (!task) {
@@ -18,6 +20,19 @@ export const processData = async (task: Task, inputData: any) => {
     
     if (!task.parameters) {
       throw new Error("Task parameters are not defined");
+    }
+    
+    // Create a cache key based on task and input data
+    const cacheKey = JSON.stringify({
+      taskId: task.id,
+      taskParams: task.parameters,
+      inputDataHash: JSON.stringify(inputData).slice(0, 100) // Only use first part of data for hash
+    });
+    
+    // Check cache before processing
+    if (processingCache.has(cacheKey)) {
+      console.log("Using cached processing result");
+      return processingCache.get(cacheKey);
     }
     
     const { dataSource, transformations, outputFormat, validation, validationRules } = task.parameters;
@@ -38,7 +53,7 @@ export const processData = async (task: Task, inputData: any) => {
     // Format data according to output format
     const formattedData = formatData(processedData, outputFormat);
     
-    return {
+    const result = {
       data: formattedData,
       metadata: {
         processedAt: new Date().toISOString(),
@@ -50,13 +65,24 @@ export const processData = async (task: Task, inputData: any) => {
         validated: !!validation
       }
     };
+    
+    // Store in cache
+    processingCache.set(cacheKey, result);
+    
+    // Limit cache size
+    if (processingCache.size > 50) {
+      const firstKey = processingCache.keys().next().value;
+      processingCache.delete(firstKey);
+    }
+    
+    return result;
   } catch (error) {
     console.error("Error in data processing:", error);
     throw new Error(`Data processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };
 
-// Validate input data
+// Validate input data with better error handling
 const validateInputData = (inputData: any): any => {
   if (inputData === undefined || inputData === null) {
     return {}; // Return empty object as fallback
@@ -64,9 +90,12 @@ const validateInputData = (inputData: any): any => {
   
   try {
     // If it's a string that looks like JSON, try to parse it
-    if (typeof inputData === 'string' && 
-        (inputData.startsWith('{') || inputData.startsWith('['))) {
-      return JSON.parse(inputData);
+    if (typeof inputData === 'string') {
+      const trimmed = inputData.trim();
+      if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || 
+          (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+        return JSON.parse(trimmed);
+      }
     }
     return inputData;
   } catch (error) {
@@ -75,12 +104,21 @@ const validateInputData = (inputData: any): any => {
   }
 };
 
-// Apply transformations to data
+// Apply transformations to data with better error handling
 const applyTransformations = (data: any, transformations: any[]): any => {
+  if (!Array.isArray(transformations) || transformations.length === 0) {
+    return data;
+  }
+  
   let processedData = { ...data };
   
   try {
     transformations.forEach(transform => {
+      if (!transform || !transform.type) {
+        console.warn("Invalid transformation object:", transform);
+        return;
+      }
+      
       console.log(`Applying transformation: ${transform.type}`);
       
       switch (transform.type) {
@@ -149,12 +187,17 @@ const validateData = (data: any, rules: any): any => {
   return { ...data, validated: true };
 };
 
-// Format data for output
+// Format data for output with robust error handling
 const formatData = (data: any, outputFormat: string = 'json'): any => {
+  if (!outputFormat) {
+    return data;
+  }
+  
   try {
     console.log(`Formatting data to: ${outputFormat}`);
+    const format = outputFormat.toLowerCase();
     
-    switch (outputFormat.toLowerCase()) {
+    switch (format) {
       case "json":
         return typeof data === 'string' ? data : JSON.stringify(data, null, 2);
       case "csv":
@@ -165,11 +208,12 @@ const formatData = (data: any, outputFormat: string = 'json'): any => {
       case "txt":
         return typeof data === 'string' ? data : JSON.stringify(data);
       default:
+        console.warn(`Unsupported output format: ${format}, returning as-is`);
         return data;
     }
   } catch (error) {
     console.error("Error formatting data:", error);
-    return data; // Return original data on error
+    return typeof data === 'string' ? data : JSON.stringify(data);
   }
 };
 

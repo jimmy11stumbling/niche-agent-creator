@@ -60,6 +60,12 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
     return value !== undefined ? value : defaultValue;
   };
 
+  // Handle form submission
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSave();
+  };
+
   return (
     <Dialog open={task !== null} onOpenChange={(open) => !open && onCancel()}>
       <DialogContent className="max-w-md">
@@ -70,13 +76,14 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
           </DialogDescription>
         </DialogHeader>
         
-        <div className="py-2 space-y-4">
+        <form onSubmit={handleSubmit} className="py-2 space-y-4">
           <div>
             <Label htmlFor="task-name">Task Name</Label>
             <Input
               id="task-name"
               value={task.name}
               onChange={(e) => updateTask("name", e.target.value)}
+              required
             />
           </div>
           
@@ -102,7 +109,7 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
           {/* Action-specific UI */}
           {task.type === "Action" && (
             <ActionTypeSelector 
-              value={task.actionType || "HTTP"} 
+              value={task.actionType as ActionType || "HTTP"} 
               onChange={(value) => updateTask("actionType", value)} 
             />
           )}
@@ -196,6 +203,49 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
               />
             )}
           
+          {/* File Operation parameters */}
+          {task.type === "Action" &&
+            task.actionType === "FileOperation" && (
+              <div className="space-y-2">
+                <Label htmlFor="file-operation">File Operation</Label>
+                <Select
+                  value={getTaskParameter("operation", "read")}
+                  onValueChange={(value) => updateTask("parameters.operation", value)}
+                >
+                  <SelectTrigger id="file-operation">
+                    <SelectValue placeholder="Select operation" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="read">Read</SelectItem>
+                    <SelectItem value="write">Write</SelectItem>
+                    <SelectItem value="append">Append</SelectItem>
+                    <SelectItem value="delete">Delete</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                <Label htmlFor="file-path">File Path</Label>
+                <Input
+                  id="file-path"
+                  value={getTaskParameter("filePath", "")}
+                  onChange={(e) => updateTask("parameters.filePath", e.target.value)}
+                  placeholder="Path to file"
+                />
+                
+                {(getTaskParameter("operation") === "write" || 
+                  getTaskParameter("operation") === "append") && (
+                  <>
+                    <Label htmlFor="file-content">Content</Label>
+                    <Input
+                      id="file-content"
+                      value={getTaskParameter("content", "")}
+                      onChange={(e) => updateTask("parameters.content", e.target.value)}
+                      placeholder="Content to write"
+                    />
+                  </>
+                )}
+              </div>
+            )}
+          
           {/* Trigger parameters */}
           {task.type === "Trigger" && (
             <TriggerSettings 
@@ -203,17 +253,18 @@ const TaskDialog: React.FC<TaskDialogProps> = ({
               onScheduleChange={(value) => updateTask("parameters.schedule", value)}
             />
           )}
-        </div>
-        
-        <DialogFooter>
-          <Button
-            variant="outline"
-            onClick={onCancel}
-          >
-            Cancel
-          </Button>
-          <Button onClick={onSave}>Save Changes</Button>
-        </DialogFooter>
+          
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onCancel}
+            >
+              Cancel
+            </Button>
+            <Button type="submit">Save Changes</Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

@@ -1,8 +1,24 @@
 
 import { Workflow, Task, Transition } from "@/types/workflow";
 
-// Validate the workflow
+// Cache for validation results to prevent redundant validations
+const validationCache = new Map<string, string[]>();
+
+// Validate the workflow with caching for performance
 export const validateWorkflow = (workflow: Workflow) => {
+  // Create a cache key based on workflow state
+  const cacheKey = JSON.stringify({
+    id: workflow.id,
+    tasks: workflow.tasks.map(t => ({ id: t.id, name: t.name, type: t.type })),
+    transitions: workflow.transitions,
+    updatedAt: workflow.updatedAt
+  });
+  
+  // Return cached validation if available
+  if (validationCache.has(cacheKey)) {
+    return validationCache.get(cacheKey) || [];
+  }
+  
   const errors: string[] = [];
   
   try {
@@ -14,6 +30,7 @@ export const validateWorkflow = (workflow: Workflow) => {
     // Check for at least one task
     if (!workflow.tasks || workflow.tasks.length === 0) {
       errors.push("Workflow must have at least one task");
+      validationCache.set(cacheKey, errors);
       return errors; // Early return if no tasks to avoid further errors
     }
     
@@ -31,24 +48,22 @@ export const validateWorkflow = (workflow: Workflow) => {
     
     // Check for duplicate task names
     const taskNames = workflow.tasks.map(task => task.name);
-    const uniqueTaskNames = new Set(taskNames);
-    if (uniqueTaskNames.size !== taskNames.length) {
+    const nameCounts: Record<string, number> = {};
+    taskNames.forEach(name => {
+      nameCounts[name] = (nameCounts[name] || 0) + 1;
+    });
+    
+    const duplicates = Object.entries(nameCounts)
+      .filter(([_, count]) => count > 1);
+      
+    if (duplicates.length > 0) {
       errors.push("Task names must be unique");
-      
-      // Add more specific information about duplicate names
-      const nameCounts: Record<string, number> = {};
-      taskNames.forEach(name => {
-        nameCounts[name] = (nameCounts[name] || 0) + 1;
+      duplicates.forEach(([name, count]) => {
+        errors.push(`Name "${name}" is used ${count} times`);
       });
-      
-      Object.entries(nameCounts)
-        .filter(([_, count]) => count > 1)
-        .forEach(([name, count]) => {
-          errors.push(`Name "${name}" is used ${count} times`);
-        });
     }
     
-    // Check for disconnected tasks
+    // Check for disconnected tasks - optimize by building a set once
     const connectedTaskIds = new Set<string>();
     
     // Add all source and target task IDs from transitions
@@ -84,33 +99,35 @@ export const validateWorkflow = (workflow: Workflow) => {
       });
     }
     
-    // Check for invalid transitions
+    // Check for invalid transitions - optimize using Map for task lookup
     if (workflow.transitions && workflow.transitions.length > 0) {
+      const taskMap = new Map(workflow.tasks.map(task => [task.id, task]));
+      
       workflow.transitions.forEach(transition => {
-        const sourceExists = workflow.tasks.some(task => task.id === transition.sourceTaskId);
-        const targetExists = workflow.tasks.some(task => task.id === transition.targetTaskId);
+        const sourceTask = taskMap.get(transition.sourceTaskId);
+        const targetTask = taskMap.get(transition.targetTaskId);
         
-        if (!sourceExists || !targetExists) {
+        if (!sourceTask || !targetTask) {
           const transitionId = transition.id.substring(0, 8);
           errors.push(`Transition ${transitionId} references missing task(s)`);
           
-          if (!sourceExists) {
+          if (!sourceTask) {
             errors.push(`Transition ${transitionId}: source task ID ${transition.sourceTaskId} not found`);
           }
           
-          if (!targetExists) {
+          if (!targetTask) {
             errors.push(`Transition ${transitionId}: target task ID ${transition.targetTaskId} not found`);
           }
         }
         
         // Check for conditions on transitions from condition tasks
-        const sourceTask = workflow.tasks.find(task => task.id === transition.sourceTaskId);
         if (sourceTask?.type === "Condition" && !transition.condition) {
           errors.push(`Transition from condition task '${sourceTask.name}' must have a condition`);
         }
       });
     }
     
+    // Validate specific task types
     validateDataProcessingTasks(workflow.tasks, errors);
     validateWebCrawlingTasks(workflow.tasks, errors);
     validateAICompletionTasks(workflow.tasks, errors);
@@ -118,6 +135,15 @@ export const validateWorkflow = (workflow: Workflow) => {
   } catch (error) {
     console.error("Error in workflow validation:", error);
     errors.push(`Validation error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+  
+  // Cache the validation result
+  validationCache.set(cacheKey, errors);
+  
+  // Limit cache size to prevent memory leaks
+  if (validationCache.size > 100) {
+    const firstKey = validationCache.keys().next().value;
+    validationCache.delete(firstKey);
   }
   
   return errors;

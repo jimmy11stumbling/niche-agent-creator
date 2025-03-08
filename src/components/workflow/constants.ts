@@ -4,7 +4,21 @@ import { v4 as uuidv4 } from "uuid";
 
 export const TASK_TYPES: TaskType[] = ["Trigger", "Action", "Condition", "SubWorkflow"];
 
-export const ACTION_TYPES: ActionType[] = ["HTTP", "Email", "DataProcessing", "Notification", "Custom", "HttpRequest", "DatabaseOperation", "MessageQueue", "ScriptExecution", "DummyAction"];
+export const ACTION_TYPES: ActionType[] = [
+  "HTTP", 
+  "Email", 
+  "DataProcessing", 
+  "Notification", 
+  "Custom", 
+  "HttpRequest", 
+  "DatabaseOperation", 
+  "MessageQueue", 
+  "ScriptExecution", 
+  "DummyAction",
+  "WebCrawling",
+  "AICompletion",
+  "FileOperation"
+];
 
 export const TRIGGER_TYPES: TriggerType[] = ["Schedule", "WebHook", "Event", "UserAction"];
 
@@ -97,6 +111,30 @@ export const ACTION_TYPE_PARAMS: Record<ActionType, Record<string, any>> = {
   },
   DummyAction: {
     description: "This is a dummy action for testing"
+  },
+  WebCrawling: {
+    url: "https://example.com",
+    depth: 2,
+    followLinks: false,
+    maxPages: 10,
+    excludePatterns: "",
+    outputFormat: "json",
+    extractRules: ""
+  },
+  AICompletion: {
+    model: "gpt-4-turbo",
+    prompt: "",
+    temperature: 0.7,
+    maxTokens: 1000,
+    topP: 1,
+    frequencyPenalty: 0,
+    presencePenalty: 0
+  },
+  FileOperation: {
+    operation: "read",
+    filePath: "",
+    encoding: "utf8",
+    content: ""
   }
 };
 
