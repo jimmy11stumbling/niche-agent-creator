@@ -21,6 +21,7 @@ import WorkflowDashboardPage from "./pages/WorkflowDashboardPage";
 import WorkflowDesignerPage from "./pages/WorkflowDesignerPage";
 import DeploymentPage from "./pages/DeploymentPage";
 import DataAnalysisPage from "./pages/DataAnalysisPage";
+import DatasetManagementPage from "./pages/DatasetManagementPage";
 
 function App() {
   return (
@@ -46,6 +47,7 @@ function App() {
         <Route path="/workflows/designer" element={<Navigate to="/workflow-designer" replace />} />
         <Route path="/deploy/:agentId" element={<DeploymentPage />} />
         <Route path="/data-analysis" element={<DataAnalysisPage />} />
+        <Route path="/dataset-management" element={<DatasetManagementPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>

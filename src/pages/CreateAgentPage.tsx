@@ -3,7 +3,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import AgentCreator from "@/components/AgentCreator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { InfoIcon } from "lucide-react";
+import { InfoIcon, DatabaseIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
@@ -21,7 +21,13 @@ const CreateAgentPage = () => {
             </AlertDescription>
           </Alert>
           
-          <div className="mt-4 flex items-center justify-end">
+          <div className="mt-4 flex items-center justify-end space-x-2">
+            <Link to="/dataset-management">
+              <Button variant="outline" className="flex items-center gap-1">
+                <DatabaseIcon className="h-4 w-4" />
+                Dataset Management
+              </Button>
+            </Link>
             <Link to="/workflows">
               <Button variant="outline">
                 Try Workflow Automation

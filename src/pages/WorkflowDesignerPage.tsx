@@ -4,7 +4,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import WorkflowDesigner from "@/components/WorkflowDesigner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { InfoIcon, FileTextIcon, DatabaseIcon, ArrowRightIcon, AlertCircle } from "lucide-react";
+import { InfoIcon, FileTextIcon, DatabaseIcon, ArrowRightIcon, AlertCircle, BrainIcon } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useParams, Link, useNavigate } from "react-router-dom";
@@ -126,7 +126,13 @@ const WorkflowDesignerPage = () => {
             </div>
           )}
           
-          <div className="mt-4 flex justify-end">
+          <div className="mt-4 flex justify-end gap-2">
+            <Link to="/dataset-management">
+              <button className="bg-primary/10 hover:bg-primary/20 text-primary px-4 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-1">
+                <BrainIcon className="h-4 w-4" />
+                Dataset Management
+              </button>
+            </Link>
             <Link to="/workflows">
               <button className="bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-md text-sm font-medium transition-colors">
                 Back to Dashboard
