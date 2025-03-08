@@ -34,6 +34,17 @@ export const ACTION_TYPE_PARAMS = {
     body: "",
     attachments: []
   },
+  Email: {
+    to: "",
+    subject: "",
+    body: "",
+    attachments: []
+  },
+  Notification: {
+    message: "",
+    type: "info",
+    recipients: []
+  },
   DatabaseOperation: {
     operation: "query",
     query: "",
@@ -74,6 +85,15 @@ export const ACTION_TYPE_PARAMS = {
     filePath: "",
     encoding: "utf8",
     content: ""
+  },
+  Custom: {
+    customData: {},
+    customFunction: ""
+  },
+  DummyAction: {
+    delay: 1000,
+    success: true,
+    response: { message: "Dummy action executed" }
   }
 };
 

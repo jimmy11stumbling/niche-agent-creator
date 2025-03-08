@@ -38,6 +38,9 @@ const ActionTypeSelector: React.FC<ActionTypeSelectorProps> = ({
           <SelectItem value="Notification">Notification</SelectItem>
           <SelectItem value="ScriptExecution">Script Execution</SelectItem>
           <SelectItem value="DataProcessing">Data Processing</SelectItem>
+          <SelectItem value="WebCrawling">Web Crawling</SelectItem>
+          <SelectItem value="AICompletion">AI Completion</SelectItem>
+          <SelectItem value="FileOperation">File Operation</SelectItem>
           <SelectItem value="DummyAction">Dummy Action (Testing)</SelectItem>
           <SelectItem value="Custom">Custom Action</SelectItem>
         </SelectContent>

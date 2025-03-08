@@ -45,7 +45,10 @@ export type ActionType =
   | "DatabaseOperation"
   | "MessageQueue"
   | "ScriptExecution"
-  | "DummyAction"; 
+  | "DummyAction"
+  | "WebCrawling"  
+  | "AICompletion"
+  | "FileOperation";
 
 export type TriggerType = "Schedule" | "WebHook" | "Event" | "UserAction";
 

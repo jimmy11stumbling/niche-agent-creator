@@ -7,7 +7,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { InfoIcon, FileTextIcon, DatabaseIcon, ArrowRightIcon } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 
 const WorkflowDesignerPage = () => {
   const { workflowId } = useParams<{ workflowId: string }>();
@@ -81,6 +81,14 @@ const WorkflowDesignerPage = () => {
               </div>
             </div>
           )}
+          
+          <div className="mt-4 flex justify-end">
+            <Link to="/workflows">
+              <button className="bg-secondary hover:bg-secondary/80 text-secondary-foreground px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                Back to Dashboard
+              </button>
+            </Link>
+          </div>
         </div>
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="container mx-auto px-4">
