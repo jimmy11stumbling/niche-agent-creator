@@ -1,10 +1,8 @@
 
 import React from "react";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FormControl, FormItem, FormLabel } from "@/components/ui/form";
-import { Textarea } from "@/components/ui/textarea";
 
 interface FileOperationSettingsProps {
   parameters: any;
@@ -15,90 +13,51 @@ const FileOperationSettings: React.FC<FileOperationSettingsProps> = ({
   parameters,
   updateTask,
 }) => {
-  const operations = ["read", "write", "append", "delete", "copy", "move"];
-  const encodings = ["utf8", "ascii", "base64", "binary", "hex", "utf16le"];
+  const operation = parameters?.operation || "read";
+  const filePath = parameters?.filePath || "";
+  const content = parameters?.content || "";
 
   return (
-    <div className="space-y-4">
-      <FormItem>
-        <FormLabel>Operation</FormLabel>
+    <div className="space-y-3">
+      <div>
+        <Label htmlFor="file-operation">File Operation</Label>
         <Select
-          value={parameters?.operation || "read"}
+          value={operation}
           onValueChange={(value) => updateTask("parameters.operation", value)}
         >
-          <SelectTrigger>
+          <SelectTrigger id="file-operation">
             <SelectValue placeholder="Select operation" />
           </SelectTrigger>
           <SelectContent>
-            {operations.map((op) => (
-              <SelectItem key={op} value={op}>
-                {op.charAt(0).toUpperCase() + op.slice(1)}
-              </SelectItem>
-            ))}
+            <SelectItem value="read">Read</SelectItem>
+            <SelectItem value="write">Write</SelectItem>
+            <SelectItem value="append">Append</SelectItem>
+            <SelectItem value="delete">Delete</SelectItem>
           </SelectContent>
         </Select>
-      </FormItem>
-
-      <FormItem>
-        <FormLabel>File Path</FormLabel>
-        <FormControl>
+      </div>
+      
+      <div>
+        <Label htmlFor="file-path">File Path</Label>
+        <Input
+          id="file-path"
+          value={filePath}
+          onChange={(e) => updateTask("parameters.filePath", e.target.value)}
+          placeholder="Path to file"
+        />
+      </div>
+      
+      {(operation === "write" || operation === "append") && (
+        <div>
+          <Label htmlFor="file-content">Content</Label>
           <Input
-            value={parameters?.filePath || ""}
-            onChange={(e) => updateTask("parameters.filePath", e.target.value)}
-            placeholder="e.g., /path/to/file.txt"
+            id="file-content"
+            value={content}
+            onChange={(e) => updateTask("parameters.content", e.target.value)}
+            placeholder="Content to write"
           />
-        </FormControl>
-      </FormItem>
-
-      {(parameters?.operation === "write" || parameters?.operation === "append") && (
-        <FormItem>
-          <FormLabel>Content</FormLabel>
-          <FormControl>
-            <Textarea
-              value={parameters?.content || ""}
-              onChange={(e) => updateTask("parameters.content", e.target.value)}
-              placeholder="Enter content to write to file"
-              className="min-h-[100px]"
-            />
-          </FormControl>
-        </FormItem>
+        </div>
       )}
-
-      {(parameters?.operation === "read" || 
-        parameters?.operation === "write" || 
-        parameters?.operation === "append") && (
-        <FormItem>
-          <FormLabel>Encoding</FormLabel>
-          <Select
-            value={parameters?.encoding || "utf8"}
-            onValueChange={(value) => updateTask("parameters.encoding", value)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select encoding" />
-            </SelectTrigger>
-            <SelectContent>
-              {encodings.map((enc) => (
-                <SelectItem key={enc} value={enc}>
-                  {enc}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </FormItem>
-      )}
-
-      {parameters?.operation === "copy" || parameters?.operation === "move" ? (
-        <FormItem>
-          <FormLabel>Destination Path</FormLabel>
-          <FormControl>
-            <Input
-              value={parameters?.destinationPath || ""}
-              onChange={(e) => updateTask("parameters.destinationPath", e.target.value)}
-              placeholder="e.g., /path/to/destination.txt"
-            />
-          </FormControl>
-        </FormItem>
-      ) : null}
     </div>
   );
 };
