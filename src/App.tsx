@@ -22,13 +22,14 @@ import WorkflowDesignerPage from "./pages/WorkflowDesignerPage";
 import DeploymentPage from "./pages/DeploymentPage";
 import DataAnalysisPage from "./pages/DataAnalysisPage";
 import DatasetManagementPage from "./pages/DatasetManagementPage";
+import ContactPage from "./pages/ContactPage";
 
 function App() {
   return (
     <BrowserRouter>
       <Toaster />
       <Routes>
-        <Route path="/" element={<MVPPage />} />
+        <Route path="/" element={<Index />} />
         <Route path="/home" element={<Navigate to="/" replace />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/pricing" element={<PricingPage />} />
@@ -43,11 +44,12 @@ function App() {
         <Route path="/workflows" element={<WorkflowDashboardPage />} />
         <Route path="/workflow-designer" element={<WorkflowDesignerPage />} />
         <Route path="/workflow-designer/:workflowId" element={<WorkflowDesignerPage />} />
-        {/* Add redirect for the old route causing 404 errors */}
-        <Route path="/workflows/designer" element={<Navigate to="/workflow-designer" replace />} />
         <Route path="/deploy/:agentId" element={<DeploymentPage />} />
         <Route path="/data-analysis" element={<DataAnalysisPage />} />
         <Route path="/dataset-management" element={<DatasetManagementPage />} />
+        <Route path="/contact" element={<ContactPage />} />
+        {/* Add redirect for the old route causing 404 errors */}
+        <Route path="/workflows/designer" element={<Navigate to="/workflow-designer" replace />} />
         {/* The 404 route should always be last */}
         <Route path="*" element={<NotFound />} />
       </Routes>

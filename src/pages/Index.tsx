@@ -23,7 +23,7 @@ const Index = () => {
             </p>
             <div className="flex flex-col sm:flex-row justify-center gap-4 fade-in">
               <Button asChild size="lg" className="text-md">
-                <Link to="/create">
+                <Link to="/create-agent">
                   <Brain className="mr-2 h-5 w-5" />
                   Create Your Agent
                 </Link>
@@ -127,7 +127,7 @@ const Index = () => {
               Start building your specialized AI assistant in minutes with our easy-to-use platform.
             </p>
             <Button asChild size="lg">
-              <Link to="/create">
+              <Link to="/create-agent">
                 Get Started Now
                 <ChevronRight className="ml-2 h-4 w-4" />
               </Link>

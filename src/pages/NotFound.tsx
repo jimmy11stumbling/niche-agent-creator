@@ -21,7 +21,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 
 const COMMON_ROUTES = [
   { path: "/", label: "Home", icon: <Home className="h-4 w-4" /> },
@@ -84,6 +84,8 @@ const NotFound = () => {
       return '/docs';
     } else if (path.includes('temp') || path.includes('example')) {
       return '/templates';
+    } else if (path.includes('contact') || path.includes('support')) {
+      return '/contact';
     }
     return null;
   };
