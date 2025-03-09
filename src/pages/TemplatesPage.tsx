@@ -68,7 +68,11 @@ const TemplatesPage = () => {
             </div>
           </div>
           
-          <TemplatesGallery onSelectTemplate={handleTemplateSelect} />
+          <TemplatesGallery 
+            onSelectTemplate={handleTemplateSelect} 
+            searchQuery={searchQuery}
+            categoryFilter={categoryFilter}
+          />
           
           <div className="mt-12 text-center">
             <p className="text-muted-foreground mb-4">
