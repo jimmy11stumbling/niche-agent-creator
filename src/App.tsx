@@ -48,6 +48,7 @@ function App() {
         <Route path="/deploy/:agentId" element={<DeploymentPage />} />
         <Route path="/data-analysis" element={<DataAnalysisPage />} />
         <Route path="/dataset-management" element={<DatasetManagementPage />} />
+        {/* The 404 route should always be last */}
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
