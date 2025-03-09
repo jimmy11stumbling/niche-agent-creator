@@ -1,5 +1,6 @@
 
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import TemplatesGallery from "@/components/TemplatesGallery";
@@ -21,7 +22,7 @@ const TemplatesPage = () => {
       title: "Template Selected",
       description: `Starting with the "${template.name}" template.`,
     });
-    navigate("/create");
+    navigate("/create-agent");
   };
 
   return (
@@ -74,7 +75,7 @@ const TemplatesPage = () => {
               Don't see what you're looking for? Create a custom agent from scratch.
             </p>
             <Button asChild>
-              <a href="/create">Create Custom Agent</a>
+              <Link to="/create-agent">Create Custom Agent</Link>
             </Button>
           </div>
         </div>
