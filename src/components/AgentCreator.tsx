@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,8 @@ import {
   Code,
   PanelRightClose,
   AlertTriangle,
+  ArrowRight,
+  Plus,
 } from "lucide-react";
 import ModelSelector from "./ModelSelector";
 import AgentPreview from "./AgentPreview";
@@ -66,6 +69,8 @@ const AgentCreator = () => {
   const [isHFTokenModalOpen, setIsHFTokenModalOpen] = useState(false);
   const [hfToken, setHfToken] = useState("");
   const [useDemoMode, setUseDemoMode] = useState(USE_DEMO_MODE);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [isCancellationModalOpen, setIsCancellationModalOpen] = useState(false);
   const [agent, setAgent] = useState({
     name: "",
     description: "",
@@ -106,6 +111,81 @@ const AgentCreator = () => {
       localStorage.setItem("agentDraft", JSON.stringify(updatedAgent));
       return updatedAgent;
     });
+    
+    // Clear error when user updates the field
+    if (formErrors[field]) {
+      setFormErrors(prev => ({ ...prev, [field]: "" }));
+    }
+  };
+
+  const validateBasics = () => {
+    const errors: Record<string, string> = {};
+    
+    if (!agent.name.trim()) {
+      errors.name = "Agent name is required";
+    }
+    
+    if (!agent.niche.trim()) {
+      errors.niche = "Agent niche is required";
+    }
+    
+    if (!agent.description.trim()) {
+      errors.description = "Description is required";
+    }
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const validatePersonality = () => {
+    const errors: Record<string, string> = {};
+    
+    if (!agent.personality.trim()) {
+      errors.personality = "Personality traits are required";
+    }
+    
+    if (!agent.systemPrompt.trim()) {
+      errors.systemPrompt = "System prompt is required";
+    }
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleContinueToPersonality = () => {
+    if (validateBasics()) {
+      setCurrentStep("personality");
+    } else {
+      toast({
+        title: "Missing Information",
+        description: "Please fill out all required fields before continuing.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleContinueToModel = () => {
+    if (validatePersonality()) {
+      setCurrentStep("model");
+    } else {
+      toast({
+        title: "Missing Information",
+        description: "Please fill out all required fields before continuing.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleContinueToDeploy = () => {
+    if (!agent.isModelDownloaded && !useDemoMode) {
+      toast({
+        title: "Model Not Downloaded",
+        description: "Please download the model or enable demo mode to continue.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setCurrentStep("deploy");
   };
 
   const handleHFTokenSubmit = () => {
@@ -124,6 +204,21 @@ const AgentCreator = () => {
         variant: "destructive",
       });
     }
+  };
+
+  const handleCancelCreation = () => {
+    if (agent.name || agent.description || agent.niche || agent.personality || agent.systemPrompt) {
+      setIsCancellationModalOpen(true);
+    } else {
+      navigate("/");
+    }
+  };
+
+  const confirmCancelCreation = () => {
+    setIsCancellationModalOpen(false);
+    // Optionally clear the draft
+    localStorage.removeItem("agentDraft");
+    navigate("/");
   };
 
   const downloadModel = async () => {
@@ -213,7 +308,18 @@ const AgentCreator = () => {
   };
 
   const handleCreateAgent = () => {
-    if (!agent.name || !agent.description || !agent.systemPrompt) {
+    // Final validation of all fields
+    const allErrors: Record<string, string> = {};
+    
+    if (!agent.name.trim()) allErrors.name = "Agent name is required";
+    if (!agent.niche.trim()) allErrors.niche = "Agent niche is required";
+    if (!agent.description.trim()) allErrors.description = "Description is required";
+    if (!agent.personality.trim()) allErrors.personality = "Personality traits are required";
+    if (!agent.systemPrompt.trim()) allErrors.systemPrompt = "System prompt is required";
+    
+    setFormErrors(allErrors);
+    
+    if (Object.keys(allErrors).length > 0) {
       toast({
         title: "Missing Information",
         description: "Please fill out all required fields.",
@@ -271,6 +377,9 @@ const AgentCreator = () => {
       title: "Template Applied",
       description: `The "${template.name}" template has been applied.`,
     });
+    
+    // Automatically move to personality tab after applying template
+    setCurrentStep("personality");
   };
 
   const generateResponse = async (userPrompt: string) => {
@@ -301,20 +410,23 @@ const AgentCreator = () => {
   };
 
   const simulateResponse = (userPrompt: string, agentConfig: any) => {
-    const { niche, personality, systemPrompt } = agentConfig;
+    const { name, niche, personality, systemPrompt } = agentConfig;
+    
+    // Use the agent name in the response if available
+    const agentName = name ? name : "your specialized assistant";
     
     if (niche.toLowerCase().includes("finance")) {
-      return "Based on best financial practices, I recommend diversifying your investments across different asset classes. This helps reduce risk while potentially increasing returns. Would you like me to elaborate on specific investment strategies?";
+      return `As ${agentName}, I recommend diversifying your investments across different asset classes. This helps reduce risk while potentially increasing returns. Would you like me to elaborate on specific investment strategies?`;
     } else if (niche.toLowerCase().includes("fitness")) {
-      return "For optimal fitness results, consistency is key. I'd recommend a balanced routine of strength training, cardio, and adequate recovery. Would you like me to suggest a specific workout plan based on your goals?";
+      return `Based on my expertise as ${agentName}, consistency is key for optimal fitness results. I'd recommend a balanced routine of strength training, cardio, and adequate recovery. Would you like me to suggest a specific workout plan based on your goals?`;
     } else if (niche.toLowerCase().includes("marketing")) {
-      return "Effective marketing strategies are data-driven and customer-focused. Consider leveraging social media analytics to understand your audience better and create targeted content that resonates with them. Would you like specific suggestions for your marketing campaign?";
+      return `As ${agentName}, I can tell you that effective marketing strategies are data-driven and customer-focused. Consider leveraging social media analytics to understand your audience better and create targeted content that resonates with them. Would you like specific suggestions for your marketing campaign?`;
     } else if (niche.toLowerCase().includes("tech") || niche.toLowerCase().includes("programming")) {
-      return "When approaching this technical challenge, I'd recommend breaking it down into smaller, more manageable components. This modular approach makes debugging easier and improves code maintainability. Would you like me to walk you through the implementation steps?";
+      return `According to best practices I've learned as ${agentName}, I'd recommend breaking down this technical challenge into smaller, more manageable components. This modular approach makes debugging easier and improves code maintainability. Would you like me to walk you through the implementation steps?`;
     } else if (niche.toLowerCase().includes("health") || niche.toLowerCase().includes("nutrition")) {
-      return "Maintaining optimal health involves balancing nutrition, physical activity, and mental wellbeing. For nutrition specifically, focus on whole foods, adequate protein intake, and staying hydrated. Would you like personalized health recommendations?";
+      return `As ${agentName}, I advise that maintaining optimal health involves balancing nutrition, physical activity, and mental wellbeing. For nutrition specifically, focus on whole foods, adequate protein intake, and staying hydrated. Would you like personalized health recommendations?`;
     } else {
-      return `I understand your question about "${userPrompt.substring(0, 30)}...". As your ${niche || "specialized"} assistant, I'm here to help with expert guidance tailored to your needs. Could you provide more details so I can give you the most relevant information?`;
+      return `I understand your question about "${userPrompt.substring(0, 30)}...". As ${agentName} specializing in ${niche || "your area of interest"}, I'm here to help with expert guidance tailored to your needs. Could you provide more details so I can give you the most relevant information?`;
     }
   };
 
@@ -372,61 +484,82 @@ const AgentCreator = () => {
 
               <TabsContent value="basics" className="space-y-4 slide-in">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Agent Name</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="name">Agent Name <span className="text-destructive">*</span></Label>
+                    {formErrors.name && <p className="text-xs text-destructive">{formErrors.name}</p>}
+                  </div>
                   <Input
                     id="name"
                     placeholder="E.g., Finance Expert, Fitness Coach, etc."
                     value={agent.name}
                     onChange={(e) => updateAgent("name", e.target.value)}
+                    className={formErrors.name ? "border-destructive" : ""}
                   />
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="niche">Agent Niche</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="niche">Agent Niche <span className="text-destructive">*</span></Label>
+                    {formErrors.niche && <p className="text-xs text-destructive">{formErrors.niche}</p>}
+                  </div>
                   <Input
                     id="niche"
                     placeholder="E.g., Personal Finance, Fitness, Marketing, etc."
                     value={agent.niche}
                     onChange={(e) => updateAgent("niche", e.target.value)}
+                    className={formErrors.niche ? "border-destructive" : ""}
                   />
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="description">Description <span className="text-destructive">*</span></Label>
+                    {formErrors.description && <p className="text-xs text-destructive">{formErrors.description}</p>}
+                  </div>
                   <Textarea
                     id="description"
                     placeholder="Describe what your agent does and who it's for..."
-                    className="min-h-[100px]"
+                    className={`min-h-[100px] ${formErrors.description ? "border-destructive" : ""}`}
                     value={agent.description}
                     onChange={(e) => updateAgent("description", e.target.value)}
                   />
                 </div>
 
-                <div className="pt-4">
-                  <Button onClick={() => setCurrentStep("personality")} className="w-full">
+                <div className="pt-4 flex justify-between">
+                  <Button variant="outline" onClick={handleCancelCreation}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleContinueToPersonality} className="gap-2">
                     Continue to Personality
+                    <ArrowRight className="h-4 w-4" />
                   </Button>
                 </div>
               </TabsContent>
 
               <TabsContent value="personality" className="space-y-4 slide-in">
                 <div className="space-y-2">
-                  <Label htmlFor="personality">Personality Traits</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="personality">Personality Traits <span className="text-destructive">*</span></Label>
+                    {formErrors.personality && <p className="text-xs text-destructive">{formErrors.personality}</p>}
+                  </div>
                   <Textarea
                     id="personality"
                     placeholder="Describe how your agent should behave (friendly, professional, humorous, etc.)"
-                    className="min-h-[100px]"
+                    className={`min-h-[100px] ${formErrors.personality ? "border-destructive" : ""}`}
                     value={agent.personality}
                     onChange={(e) => updateAgent("personality", e.target.value)}
                   />
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="systemPrompt">System Prompt</Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="systemPrompt">System Prompt <span className="text-destructive">*</span></Label>
+                    {formErrors.systemPrompt && <p className="text-xs text-destructive">{formErrors.systemPrompt}</p>}
+                  </div>
                   <Textarea
                     id="systemPrompt"
                     placeholder="Write instructions that define how your agent should respond..."
-                    className="min-h-[150px]"
+                    className={`min-h-[150px] ${formErrors.systemPrompt ? "border-destructive" : ""}`}
                     value={agent.systemPrompt}
                     onChange={(e) => updateAgent("systemPrompt", e.target.value)}
                   />
@@ -447,8 +580,9 @@ const AgentCreator = () => {
                   <Button variant="outline" onClick={() => setCurrentStep("basics")}>
                     Back
                   </Button>
-                  <Button onClick={() => setCurrentStep("model")}>
+                  <Button onClick={handleContinueToModel} className="gap-2">
                     Continue to Model Selection
+                    <ArrowRight className="h-4 w-4" />
                   </Button>
                 </div>
               </TabsContent>
@@ -562,10 +696,12 @@ const AgentCreator = () => {
                     Back
                   </Button>
                   <Button 
-                    onClick={() => setCurrentStep("deploy")}
+                    onClick={handleContinueToDeploy}
                     disabled={!agent.isModelDownloaded && !useDemoMode}
+                    className="gap-2"
                   >
                     Continue to Deployment
+                    <ArrowRight className="h-4 w-4" />
                   </Button>
                 </div>
               </TabsContent>
@@ -632,7 +768,8 @@ const AgentCreator = () => {
                   <Button variant="outline" onClick={() => setCurrentStep("model")}>
                     Back
                   </Button>
-                  <Button onClick={handleCreateAgent}>
+                  <Button onClick={handleCreateAgent} className="gap-2">
+                    <Plus className="h-4 w-4" />
                     Create Agent
                   </Button>
                 </div>
@@ -694,6 +831,25 @@ const AgentCreator = () => {
             </Button>
             <Button type="button" onClick={handleHFTokenSubmit}>
               Save Token & Download
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isCancellationModalOpen} onOpenChange={setIsCancellationModalOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Discard Changes?</DialogTitle>
+            <DialogDescription>
+              You have unsaved changes. Are you sure you want to leave? Your draft will be saved locally.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setIsCancellationModalOpen(false)}>
+              Continue Editing
+            </Button>
+            <Button variant="destructive" onClick={confirmCancelCreation}>
+              Discard & Leave
             </Button>
           </DialogFooter>
         </DialogContent>
