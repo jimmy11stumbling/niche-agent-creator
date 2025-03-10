@@ -4,7 +4,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AgentChat from "./agent/AgentChat";
 import AgentConfig from "./agent/AgentConfig";
 import AgentOptionsPanel from "./agent/AgentOptionsPanel";
-import { Brain, MessageSquare, FileCode, Settings } from "lucide-react";
+import { Brain, MessageSquare, FileCode, Settings, Speech } from "lucide-react";
+import VoiceSelector from "./agent/VoiceSelector";
 
 interface AgentPreviewProps {
   agent: {
@@ -32,7 +33,7 @@ const AgentPreview = ({ agent }: AgentPreviewProps) => {
 
   return (
     <Tabs defaultValue="chat">
-      <TabsList className="grid w-full grid-cols-3">
+      <TabsList className="grid w-full grid-cols-4">
         <TabsTrigger value="chat" className="flex items-center gap-1">
           <MessageSquare className="h-4 w-4" />
           Chat Preview
@@ -40,6 +41,10 @@ const AgentPreview = ({ agent }: AgentPreviewProps) => {
         <TabsTrigger value="config" className="flex items-center gap-1">
           <FileCode className="h-4 w-4" />
           Configuration
+        </TabsTrigger>
+        <TabsTrigger value="voice" className="flex items-center gap-1">
+          <Speech className="h-4 w-4" />
+          Voice
         </TabsTrigger>
         <TabsTrigger value="options" className="flex items-center gap-1">
           <Settings className="h-4 w-4" />
@@ -53,6 +58,13 @@ const AgentPreview = ({ agent }: AgentPreviewProps) => {
       
       <TabsContent value="config" className="space-y-4 fade-in">
         <AgentConfig agent={currentAgent} />
+      </TabsContent>
+      
+      <TabsContent value="voice" className="space-y-4 fade-in">
+        <VoiceSelector 
+          selectedVoiceId={currentAgent.selectedVoiceId}
+          onSelectVoice={(voiceId) => handleUpdateAgent({ selectedVoiceId: voiceId })}
+        />
       </TabsContent>
       
       <TabsContent value="options" className="space-y-4 fade-in">

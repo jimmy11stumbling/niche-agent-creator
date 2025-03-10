@@ -1,7 +1,7 @@
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Brain, MessageSquare, LayoutDashboard, User, Code, Database, ChevronDown, ChevronUp, Settings, Clock, BookOpen } from "lucide-react";
+import { Brain, MessageSquare, LayoutDashboard, User, Code, Database, ChevronDown, ChevronUp, Settings, Clock, BookOpen, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
