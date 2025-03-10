@@ -1,7 +1,8 @@
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Brain, MessageSquare, LayoutDashboard, User, Code } from "lucide-react";
+import { Brain, MessageSquare, LayoutDashboard, User, Code, Database } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 
 interface AgentConfigProps {
   agent: {
@@ -14,6 +15,7 @@ interface AgentConfigProps {
     isModelDownloaded: boolean;
     selectedModel?: string;
     useDemoMode?: boolean;
+    deploymentMethod?: string;
   };
 }
 
@@ -35,8 +37,13 @@ const AgentConfig = ({ agent }: AgentConfigProps) => {
             </div>
             <div>
               <h4 className="text-sm font-medium">Niche</h4>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground flex items-center">
                 {agent.niche || "Not specified"}
+                {agent.niche && (
+                  <Badge variant="outline" className="ml-2">
+                    {agent.niche}
+                  </Badge>
+                )}
               </p>
             </div>
             <div>
@@ -121,6 +128,39 @@ const AgentConfig = ({ agent }: AgentConfigProps) => {
                     Not Downloaded
                   </>
                 )}
+              </p>
+            </div>
+            {agent.deploymentMethod && (
+              <div>
+                <h4 className="text-sm font-medium">Deployment Method</h4>
+                <p className="text-sm text-muted-foreground">
+                  {agent.deploymentMethod === "web" && "Web Application"}
+                  {agent.deploymentMethod === "api" && "API Endpoint"}
+                  {agent.deploymentMethod === "widget" && "Embeddable Widget"}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <Separator />
+
+        <div>
+          <h3 className="text-lg font-medium flex items-center mb-2">
+            <Database className="mr-2 h-5 w-5 text-primary" />
+            Data Integration
+          </h3>
+          <div className="space-y-2 ml-7">
+            <div>
+              <h4 className="text-sm font-medium">Knowledge Sources</h4>
+              <p className="text-sm text-muted-foreground">
+                No custom data sources connected
+              </p>
+            </div>
+            <div>
+              <h4 className="text-sm font-medium">Context Window</h4>
+              <p className="text-sm text-muted-foreground">
+                Standard (4K tokens)
               </p>
             </div>
           </div>

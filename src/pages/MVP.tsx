@@ -20,6 +20,7 @@ const MVPPage = () => {
     name: "MVP Demo Assistant",
     description: "A demo assistant to showcase the core functionality of the application.",
     niche: "productivity",
+    personality: "Helpful, friendly, and efficient", // Added the missing personality property
     isModelDownloaded: true,
     useDemoMode: true
   };
